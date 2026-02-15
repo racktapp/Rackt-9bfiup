@@ -12,7 +12,7 @@ import { normalizeMatchSets, calculateSetsWon } from '@/services/matchUtils';
 
 const supabase = getSupabaseClient();
 
-type TabType = 'feed' | 'overview';
+type TabType = 'feed' | 'overview' | 'tournaments';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -20,6 +20,9 @@ export default function DashboardScreen() {
 
   const [userId, setUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+
+  // Import tournaments component
+  const TournamentsHome = require('../../tournaments/index').default;
   const [events, setEvents] = useState<any[]>([]);
   const [pendingMatches, setPendingMatches] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -511,6 +514,14 @@ export default function DashboardScreen() {
               Feed
             </Text>
           </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === 'tournaments' && styles.tabActive]}
+            onPress={() => setActiveTab('tournaments')}
+          >
+            <Text style={[styles.tabText, activeTab === 'tournaments' && styles.tabTextActive]}>
+              Tournaments
+            </Text>
+          </Pressable>
         </View>
         <ScreenLoader message="Loading dashboard..." />
       </View>
@@ -549,6 +560,14 @@ export default function DashboardScreen() {
           >
             <Text style={[styles.tabText, activeTab === 'feed' && styles.tabTextActive]}>
               Feed
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === 'tournaments' && styles.tabActive]}
+            onPress={() => setActiveTab('tournaments')}
+          >
+            <Text style={[styles.tabText, activeTab === 'tournaments' && styles.tabTextActive]}>
+              Tournaments
             </Text>
           </Pressable>
         </View>
@@ -595,9 +614,17 @@ export default function DashboardScreen() {
             Feed
           </Text>
         </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === 'tournaments' && styles.tabActive]}
+          onPress={() => setActiveTab('tournaments')}
+        >
+          <Text style={[styles.tabText, activeTab === 'tournaments' && styles.tabTextActive]}>
+            Tournaments
+          </Text>
+        </Pressable>
       </View>
 
-      {activeTab === 'overview' ? renderOverviewTab() : renderFeedTab()}
+      {activeTab === 'overview' ? renderOverviewTab() : activeTab === 'feed' ? renderFeedTab() : <TournamentsHome />}
     </View>
   );
 }

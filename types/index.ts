@@ -120,3 +120,50 @@ export interface LeaderboardEntry {
   winPercentage: number;
   rank: number;
 }
+
+export interface TournamentParticipant {
+  userId: string;
+  displayName: string;
+  username: string;
+  avatarUrl: string | null;
+  joinedAt: string;
+  seed?: number | null;
+}
+
+export interface Tournament {
+  id: string;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  title: string;
+  sport: Sport;
+  type: 'americano' | 'normal';
+  format?: 'groups_playoffs';
+  mode: 'singles' | 'doubles';
+  isCompetitive: boolean;
+  state: 'draft' | 'inviting' | 'locked' | 'in_progress' | 'completed';
+  groupId: string | null;
+  participants: TournamentParticipant[];
+  settings: {
+    courts?: number;
+    americano?: {
+      pointsToWin?: number;
+      rounds?: number;
+    };
+    groupsPlayoffs?: {
+      groupCount?: number;
+      advancePerGroup?: number;
+    };
+  };
+}
+
+export interface TournamentInvite {
+  id: string;
+  tournamentId: string;
+  invitedUserId: string;
+  invitedByUserId: string;
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: string;
+  invitedUser?: User;
+  invitedByUser?: User;
+}

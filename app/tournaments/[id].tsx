@@ -7,11 +7,13 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
 import { Button, UserAvatar, UserName, ScreenLoader, ErrorState } from '@/components';
 import { tournamentsService } from '@/services/tournaments';
-import { Tournament } from '@/types';
+import { Tournament, TournamentGroup, TournamentMatch, TournamentStanding } from '@/types';
 import { getSupabaseClient } from '@/template';
 import { useAlert } from '@/template';
 
 const supabase = getSupabaseClient();
+
+type TabType = 'overview' | 'groups' | 'playoffs' | 'matches';
 
 export default function TournamentDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -21,6 +23,13 @@ export default function TournamentDetailScreen() {
 
   const [userId, setUserId] = useState<string | null>(null);
   const [tournament, setTournament] = useState<Tournament | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [groups, setGroups] = useState<TournamentGroup[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [groupStandings, setGroupStandings] = useState<TournamentStanding[]>([]);
+  const [groupMatches, setGroupMatches] = useState<TournamentMatch[]>([]);
+  const [playoffMatches, setPlayoffMatches] = useState<TournamentMatch[]>([]);
+  const [allMatches, setAllMatches] = useState<TournamentMatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +42,18 @@ export default function TournamentDetailScreen() {
       loadTournament();
     }
   }, [userId, id]);
+
+  useEffect(() => {
+    if (tournament && tournament.state === 'in_progress') {
+      loadTournamentData();
+    }
+  }, [tournament, activeTab]);
+
+  useEffect(() => {
+    if (selectedGroupId) {
+      loadGroupData();
+    }
+  }, [selectedGroupId]);
 
   const loadUserId = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -54,10 +75,73 @@ export default function TournamentDetailScreen() {
     }
   };
 
+  const loadTournamentData = async () => {
+    if (!tournament || !id || typeof id !== 'string') return;
+
+    try {
+      const [groupsData, matchesData] = await Promise.all([
+        tournamentsService.getGroupsByTournament(id),
+        tournamentsService.getMatchesByTournament(id),
+      ]);
+
+      setGroups(groupsData);
+      setAllMatches(matchesData);
+      setPlayoffMatches(matchesData.filter(m => m.stage === 'playoff'));
+
+      if (groupsData.length > 0 && !selectedGroupId) {
+        setSelectedGroupId(groupsData[0].id);
+      }
+    } catch (err: any) {
+      console.error('Error loading tournament data:', err);
+    }
+  };
+
+  const loadGroupData = async () => {
+    if (!selectedGroupId) return;
+
+    try {
+      const [standings, matches] = await Promise.all([
+        tournamentsService.getGroupStandings(selectedGroupId),
+        tournamentsService.getMatchesByGroup(selectedGroupId),
+      ]);
+
+      setGroupStandings(standings);
+      setGroupMatches(matches);
+    } catch (err: any) {
+      console.error('Error loading group data:', err);
+    }
+  };
+
+  const handleStartTournament = async () => {
+    if (!tournament) return;
+
+    try {
+      await tournamentsService.generateNormalTournament(tournament.id);
+      await loadTournament();
+      await loadTournamentData();
+      setActiveTab('groups');
+    } catch (err: any) {
+      console.error('Error starting tournament:', err);
+      showAlert('Error', err.message || 'Failed to start tournament');
+    }
+  };
+
+  const handleConfirmMatch = async (matchId: string) => {
+    try {
+      await tournamentsService.confirmMatch(matchId, false);
+      await loadTournamentData();
+      if (selectedGroupId) {
+        await loadGroupData();
+      }
+    } catch (err: any) {
+      console.error('Error confirming match:', err);
+      showAlert('Error', err.message || 'Failed to confirm match');
+    }
+  };
+
   const handleStateChange = async (newState: Tournament['state']) => {
     if (!tournament) return;
 
-    // Validate lock requirements
     if (newState === 'locked') {
       const validation = tournamentsService.validateTournamentForLocking(tournament);
       if (!validation.valid) {
@@ -75,57 +159,17 @@ export default function TournamentDetailScreen() {
     }
   };
 
-  if (isLoading) {
+  const renderOverviewTab = () => {
+    if (!tournament) return null;
+
+    const isCreator = userId === tournament.createdByUserId;
+
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()}>
-            <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Tournament</Text>
-          <View style={{ width: 24 }} />
-        </View>
-        <ScreenLoader message="Loading tournament..." />
-      </View>
-    );
-  }
-
-  if (error || !tournament) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()}>
-            <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Tournament</Text>
-          <View style={{ width: 24 }} />
-        </View>
-        <ErrorState message={error || 'Tournament not found'} onRetry={loadTournament} />
-      </View>
-    );
-  }
-
-  const isCreator = userId === tournament.createdByUserId;
-  const canInvite = isCreator && (tournament.state === 'draft' || tournament.state === 'inviting');
-  const canLock = isCreator && tournament.state === 'inviting';
-
-  return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Tournament</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Tournament Info Card */}
         <View style={styles.infoCard}>
           <View style={styles.infoHeader}>
             <Image
@@ -167,7 +211,6 @@ export default function TournamentDetailScreen() {
           </View>
         </View>
 
-        {/* Participants */}
         <View style={styles.participantsCard}>
           <Text style={styles.cardTitle}>
             Participants ({tournament.participants.length})
@@ -198,7 +241,6 @@ export default function TournamentDetailScreen() {
           </View>
         </View>
 
-        {/* Content based on state */}
         {tournament.state === 'draft' && isCreator && (
           <View style={styles.actionsCard}>
             <Text style={styles.helperText}>
@@ -222,7 +264,7 @@ export default function TournamentDetailScreen() {
         {tournament.state === 'inviting' && isCreator && (
           <View style={styles.actionsCard}>
             <Text style={styles.helperText}>
-              Waiting for players to accept invites. Once ready, lock the tournament to finalize participants.
+              Waiting for players to accept invites. Once ready, lock the tournament.
             </Text>
             <Button
               title="Invite More Players"
@@ -241,49 +283,318 @@ export default function TournamentDetailScreen() {
 
         {tournament.state === 'locked' && (
           <View style={styles.actionsCard}>
-            {tournament.state === 'locked' && isCreator && (
-              <Text style={styles.helperText}>
-                Tournament is locked. No new participants can join. Ready to start?
-              </Text>
+            {isCreator && (
+              <>
+                <Text style={styles.helperText}>
+                  Tournament is locked. Ready to generate groups and matches?
+                </Text>
+                <Button
+                  title="Start Tournament"
+                  onPress={handleStartTournament}
+                  fullWidth
+                />
+              </>
             )}
             {!isCreator && (
               <View style={styles.lockedInfo}>
                 <MaterialIcons name="lock" size={20} color={Colors.textMuted} />
                 <Text style={styles.lockedText}>
-                  Tournament is locked. Participants finalized.
+                  Tournament is locked. Waiting for creator to start.
                 </Text>
               </View>
             )}
-            {isCreator && (
-              <Button
-                title="Start Tournament"
-                onPress={() => handleStateChange('in_progress')}
-                fullWidth
-              />
-            )}
-          </View>
-        )}
-
-        {tournament.state === 'in_progress' && (
-          <View style={styles.placeholderCard}>
-            <MaterialIcons name="sports-tennis" size={48} color={Colors.textMuted} />
-            <Text style={styles.placeholderTitle}>Matches & Rounds</Text>
-            <Text style={styles.placeholderText}>
-              Tournament is in progress. Match scheduling and results will appear here.
-            </Text>
           </View>
         )}
 
         {tournament.state === 'completed' && (
           <View style={styles.placeholderCard}>
             <MaterialIcons name="emoji-events" size={48} color={Colors.accentGold} />
-            <Text style={styles.placeholderTitle}>Final Results</Text>
+            <Text style={styles.placeholderTitle}>Tournament Completed!</Text>
             <Text style={styles.placeholderText}>
-              Tournament completed. Final standings and results will appear here.
+              Check the Groups and Playoffs tabs for final results
             </Text>
           </View>
         )}
       </ScrollView>
+    );
+  };
+
+  const renderGroupsTab = () => {
+    if (groups.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Groups will appear after tournament starts</Text>
+        </View>
+      );
+    }
+
+    const selectedGroup = groups.find(g => g.id === selectedGroupId);
+
+    return (
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Group Selector */}
+        {groups.length > 1 && (
+          <View style={styles.groupSelector}>
+            {groups.map(group => (
+              <Pressable
+                key={group.id}
+                style={[
+                  styles.groupTab,
+                  selectedGroupId === group.id && styles.groupTabActive,
+                ]}
+                onPress={() => setSelectedGroupId(group.id)}
+              >
+                <Text style={[
+                  styles.groupTabText,
+                  selectedGroupId === group.id && styles.groupTabTextActive,
+                ]}>
+                  {group.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {selectedGroup && (
+          <>
+            {/* Standings */}
+            <View style={styles.standingsCard}>
+              <Text style={styles.cardTitle}>Standings</Text>
+              <View style={styles.standingsTable}>
+                <View style={styles.standingsHeader}>
+                  <Text style={[styles.standingsHeaderText, { flex: 2 }]}>Player</Text>
+                  <Text style={styles.standingsHeaderText}>W</Text>
+                  <Text style={styles.standingsHeaderText}>L</Text>
+                  <Text style={styles.standingsHeaderText}>Sets</Text>
+                </View>
+                {groupStandings.map((standing, idx) => (
+                  <View key={standing.participant.userId} style={styles.standingsRow}>
+                    <View style={styles.standingsRank}>
+                      <Text style={styles.standingsRankText}>{idx + 1}</Text>
+                    </View>
+                    <Text style={[styles.standingsPlayerText, { flex: 2 }]} numberOfLines={1}>
+                      {standing.participant.displayName}
+                    </Text>
+                    <Text style={styles.standingsStatText}>{standing.wins}</Text>
+                    <Text style={styles.standingsStatText}>{standing.losses}</Text>
+                    <Text style={styles.standingsStatText}>
+                      {standing.setsWon}–{standing.setsLost}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            {/* Matches */}
+            <View style={styles.matchesCard}>
+              <Text style={styles.cardTitle}>Matches</Text>
+              {groupMatches.map(match => renderMatchCard(match))}
+            </View>
+          </>
+        )}
+      </ScrollView>
+    );
+  };
+
+  const renderPlayoffsTab = () => {
+    if (playoffMatches.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Playoffs will appear after group stage completes</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.matchesCard}>
+          <Text style={styles.cardTitle}>Playoff Bracket</Text>
+          {playoffMatches.map(match => renderMatchCard(match))}
+        </View>
+      </ScrollView>
+    );
+  };
+
+  const renderMatchesTab = () => {
+    if (allMatches.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Matches will appear after tournament starts</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {allMatches.map(match => renderMatchCard(match))}
+      </ScrollView>
+    );
+  };
+
+  const renderMatchCard = (match: TournamentMatch) => {
+    const teamANames = match.teamA.members?.map(m => m.displayName).join(' / ') || 'Team A';
+    const teamBNames = match.teamB.members?.map(m => m.displayName).join(' / ') || 'Team B';
+    const scoreDisplay = match.score.map(s => `${s.a}–${s.b}`).join(' ');
+    
+    const isParticipant = match.teamA.memberUserIds.includes(userId || '') || 
+                          match.teamB.memberUserIds.includes(userId || '');
+    const hasConfirmed = match.confirmedByUserIds.includes(userId || '');
+    const canConfirm = isParticipant && match.status === 'submitted' && !hasConfirmed;
+
+    return (
+      <View key={match.id} style={styles.matchCard}>
+        <View style={styles.matchHeader}>
+          <View style={styles.matchStage}>
+            <Text style={styles.matchStageText}>
+              {match.stage === 'group' ? 'Group Stage' : 'Playoff'}
+            </Text>
+          </View>
+          <View style={[
+            styles.matchStatus,
+            match.status === 'confirmed' && styles.matchStatusConfirmed,
+            match.status === 'submitted' && styles.matchStatusSubmitted,
+          ]}>
+            <Text style={styles.matchStatusText}>
+              {match.status === 'confirmed' ? 'Confirmed' : 
+               match.status === 'submitted' ? 'Awaiting Confirmation' : 
+               'Pending'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.matchTeams}>
+          <Text style={styles.matchTeamName} numberOfLines={1}>{teamANames}</Text>
+          <Text style={styles.matchVs}>vs</Text>
+          <Text style={styles.matchTeamName} numberOfLines={1}>{teamBNames}</Text>
+        </View>
+
+        {scoreDisplay && (
+          <Text style={styles.matchScore}>{scoreDisplay}</Text>
+        )}
+
+        {match.status === 'pending' && isParticipant && (
+          <Button
+            title="Enter Score"
+            onPress={() => router.push(`/tournaments/match-score?matchId=${match.id}`)}
+            variant="secondary"
+            fullWidth
+            icon={<MaterialIcons name="edit" size={16} color={Colors.textPrimary} />}
+          />
+        )}
+
+        {canConfirm && (
+          <Button
+            title="Confirm Result"
+            onPress={() => handleConfirmMatch(match.id)}
+            fullWidth
+          />
+        )}
+
+        {match.status === 'submitted' && hasConfirmed && (
+          <View style={styles.confirmedBadge}>
+            <MaterialIcons name="check-circle" size={16} color={Colors.success} />
+            <Text style={styles.confirmedText}>You confirmed this result</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Tournament</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <ScreenLoader message="Loading tournament..." />
+      </View>
+    );
+  }
+
+  if (error || !tournament) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Tournament</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <ErrorState message={error || 'Tournament not found'} onRetry={loadTournament} />
+      </View>
+    );
+  }
+
+  const showTabs = tournament.state === 'in_progress' || tournament.state === 'completed';
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()}>
+          <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
+        </Pressable>
+        <Text style={styles.headerTitle}>Tournament</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      {showTabs && (
+        <View style={styles.tabs}>
+          <Pressable
+            style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
+            onPress={() => setActiveTab('overview')}
+          >
+            <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
+              Overview
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === 'groups' && styles.tabActive]}
+            onPress={() => setActiveTab('groups')}
+          >
+            <Text style={[styles.tabText, activeTab === 'groups' && styles.tabTextActive]}>
+              Groups
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === 'playoffs' && styles.tabActive]}
+            onPress={() => setActiveTab('playoffs')}
+          >
+            <Text style={[styles.tabText, activeTab === 'playoffs' && styles.tabTextActive]}>
+              Playoffs
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === 'matches' && styles.tabActive]}
+            onPress={() => setActiveTab('matches')}
+          >
+            <Text style={[styles.tabText, activeTab === 'matches' && styles.tabTextActive]}>
+              Matches
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
+      {activeTab === 'overview' && renderOverviewTab()}
+      {activeTab === 'groups' && renderGroupsTab()}
+      {activeTab === 'playoffs' && renderPlayoffsTab()}
+      {activeTab === 'matches' && renderMatchesTab()}
     </View>
   );
 }
@@ -307,12 +618,46 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
+  tabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+  },
+  tabActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: Colors.primary,
+  },
+  tabText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+    fontWeight: Typography.weights.medium,
+  },
+  tabTextActive: {
+    color: Colors.primary,
+    fontWeight: Typography.weights.semibold,
+  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: Spacing.lg,
     gap: Spacing.lg,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.xxl,
+  },
+  emptyText: {
+    fontSize: Typography.sizes.base,
+    color: Colors.textMuted,
+    textAlign: 'center',
   },
   infoCard: {
     backgroundColor: Colors.surface,
@@ -445,5 +790,161 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  groupSelector: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  groupTab: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  groupTabActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  groupTabText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textMuted,
+  },
+  groupTabTextActive: {
+    color: Colors.textPrimary,
+    fontWeight: Typography.weights.semibold,
+  },
+  standingsCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  standingsTable: {
+    gap: Spacing.xs,
+  },
+  standingsHeader: {
+    flexDirection: 'row',
+    paddingBottom: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    gap: Spacing.sm,
+  },
+  standingsHeaderText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    width: 40,
+  },
+  standingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  standingsRank: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  standingsRankText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textMuted,
+  },
+  standingsPlayerText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textPrimary,
+  },
+  standingsStatText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    width: 40,
+  },
+  matchesCard: {
+    gap: Spacing.md,
+  },
+  matchCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  matchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  matchStage: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+  },
+  matchStageText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+    fontWeight: Typography.weights.medium,
+  },
+  matchStatus: {
+    backgroundColor: Colors.textMuted + '20',
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+  },
+  matchStatusConfirmed: {
+    backgroundColor: Colors.success + '20',
+  },
+  matchStatusSubmitted: {
+    backgroundColor: Colors.warning + '20',
+  },
+  matchStatusText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textMuted,
+  },
+  matchTeams: {
+    gap: Spacing.xs,
+    alignItems: 'center',
+  },
+  matchTeamName: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  matchVs: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+    fontWeight: Typography.weights.bold,
+  },
+  matchScore: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
+  },
+  confirmedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+  },
+  confirmedText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.success,
+    fontWeight: Typography.weights.medium,
   },
 });

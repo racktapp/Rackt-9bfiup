@@ -167,3 +167,43 @@ export interface TournamentInvite {
   invitedUser?: User;
   invitedByUser?: User;
 }
+
+export interface TournamentTeam {
+  memberUserIds: string[];
+  members?: TournamentParticipant[];
+}
+
+export interface TournamentGroup {
+  id: string;
+  tournamentId: string;
+  name: string;
+  groupIndex: number;
+  participants: TournamentParticipant[];
+  createdAt: string;
+}
+
+export interface TournamentMatch {
+  id: string;
+  tournamentId: string;
+  stage: 'group' | 'playoff';
+  groupId: string | null;
+  roundIndex: number;
+  teamA: TournamentTeam;
+  teamB: TournamentTeam;
+  score: Array<{ a: number; b: number }>;
+  status: 'pending' | 'submitted' | 'confirmed';
+  submittedByUserId: string | null;
+  confirmedByUserIds: string[];
+  winner: 'A' | 'B' | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TournamentStanding {
+  participant: TournamentParticipant;
+  wins: number;
+  losses: number;
+  setsWon: number;
+  setsLost: number;
+  setDiff: number;
+}

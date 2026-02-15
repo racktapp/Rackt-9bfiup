@@ -34,6 +34,7 @@ export default function RootLayout() {
           <Stack.Screen name="tournaments/create" />
           <Stack.Screen name="tournaments/invite" />
           <Stack.Screen name="tournaments/[id]" />
+          <Stack.Screen name="tournaments/match-score" />
         </Stack>
       </SafeAreaProvider>
     </AlertProvider>

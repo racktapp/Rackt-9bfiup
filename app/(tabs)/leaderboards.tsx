@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   segmentActive: {
-    backgroundColor: Colors.accentGold,
+    backgroundColor: Colors.primary,
   },
   segmentText: {
     fontSize: Typography.sizes.sm,

@@ -559,9 +559,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   sportChipSelected: {
-    backgroundColor: Colors.accentGold,
-    borderColor: Colors.accentGold,
-    shadowColor: Colors.accentGold,
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+    shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

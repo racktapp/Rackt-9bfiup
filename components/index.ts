@@ -8,3 +8,4 @@ export { MatchPoster } from './MatchPoster';
 export type { PosterData } from './MatchPoster';
 export { SettingsRow, SettingsSection } from './settings';
 export { Avatar, Button, Input } from './ui';
+export { AdMobBanner } from './AdMobBanner';

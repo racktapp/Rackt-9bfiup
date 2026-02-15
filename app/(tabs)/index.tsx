@@ -5,7 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
-import { Button, ScreenLoader, EmptyState, ErrorState } from '@/components';
+import { AdMobBanner, Button, ScreenLoader, EmptyState, ErrorState } from '@/components';
 import { useGroups } from '@/hooks/useGroups';
 import { Group } from '@/types';
 import { getSupabaseClient } from '@/template';
@@ -121,7 +121,7 @@ export default function GroupsScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -163,6 +163,10 @@ export default function GroupsScreen() {
           fullWidth
         />
       </ScrollView>
+
+      <View style={[styles.bannerContainer, { paddingBottom: insets.bottom }]}>
+        <AdMobBanner />
+      </View>
     </View>
   );
 }
@@ -197,6 +201,12 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: Spacing.lg,
     gap: Spacing.lg,
+  },
+  bannerContainer: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingTop: Spacing.sm,
+    backgroundColor: Colors.background,
   },
 
   groupsList: {

@@ -144,20 +144,29 @@ export const tournamentsService = {
     return (data || []).map(this.mapInvite);
   },
 
-  async getPendingInvitesForUser(userId: string): Promise<TournamentInvite[]> {
+  async getPendingInvitesForUser(userId: string): Promise<(TournamentInvite & { tournament?: Tournament })[]> {
     const { data, error } = await supabase
       .from('tournament_invites')
       .select(`
-        *,
-        invitedUser:invited_user_id (id, username, display_name, avatar_url),
-        invitedByUser:invited_by_user_id (id, username, display_name, avatar_url)
+        id,
+        tournament_id,
+        invited_user_id,
+        invited_by_user_id,
+        status,
+        created_at,
+        tournament:tournament_id(*),
+        invitedUser:invited_user_id(id, username, display_name, avatar_url),
+        invitedByUser:invited_by_user_id(id, username, display_name, avatar_url)
       `)
       .eq('invited_user_id', userId)
       .eq('status', 'pending');
 
     if (error) throw error;
 
-    return (data || []).map(this.mapInvite);
+    return (data || []).map(raw => ({
+      ...this.mapInvite(raw),
+      tournament: raw.tournament ? this.mapTournament(raw.tournament) : undefined,
+    }));
   },
 
   async respondToInvite(inviteId: string, accept: boolean): Promise<void> {
@@ -222,6 +231,37 @@ export const tournamentsService = {
 
       if (tournamentError) throw tournamentError;
     }
+  },
+
+  validateTournamentForLocking(tournament: Tournament): { valid: boolean; message: string } {
+    const count = tournament.participants.length;
+    const { type, mode } = tournament;
+
+    // Singles normal: min 4
+    if (mode === 'singles' && type === 'normal') {
+      if (count < 4) {
+        return { valid: false, message: 'Singles Normal tournaments require at least 4 players' };
+      }
+    }
+
+    // Doubles americano: min 4 and even
+    if (mode === 'doubles' && type === 'americano') {
+      if (count < 4) {
+        return { valid: false, message: 'Doubles Americano tournaments require at least 4 players' };
+      }
+      if (count % 2 !== 0) {
+        return { valid: false, message: 'Doubles Americano tournaments require an even number of players' };
+      }
+    }
+
+    // Doubles normal: min 4
+    if (mode === 'doubles' && type === 'normal') {
+      if (count < 4) {
+        return { valid: false, message: 'Doubles Normal tournaments require at least 4 players' };
+      }
+    }
+
+    return { valid: true, message: '' };
   },
 
   mapTournament(raw: any): Tournament {

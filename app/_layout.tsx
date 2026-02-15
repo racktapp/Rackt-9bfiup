@@ -32,6 +32,7 @@ export default function RootLayout() {
           <Stack.Screen name="settings/appearance" />
           <Stack.Screen name="tournaments/index" />
           <Stack.Screen name="tournaments/create" />
+          <Stack.Screen name="tournaments/invite" />
           <Stack.Screen name="tournaments/[id]" />
         </Stack>
       </SafeAreaProvider>

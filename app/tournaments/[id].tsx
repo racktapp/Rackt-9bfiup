@@ -9,6 +9,7 @@ import { Button, UserAvatar, UserName, ScreenLoader, ErrorState } from '@/compon
 import { tournamentsService } from '@/services/tournaments';
 import { Tournament } from '@/types';
 import { getSupabaseClient } from '@/template';
+import { useAlert } from '@/template';
 
 const supabase = getSupabaseClient();
 
@@ -16,6 +17,7 @@ export default function TournamentDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const { showAlert } = useAlert();
 
   const [userId, setUserId] = useState<string | null>(null);
   const [tournament, setTournament] = useState<Tournament | null>(null);
@@ -54,6 +56,15 @@ export default function TournamentDetailScreen() {
 
   const handleStateChange = async (newState: Tournament['state']) => {
     if (!tournament) return;
+
+    // Validate lock requirements
+    if (newState === 'locked') {
+      const validation = tournamentsService.validateTournamentForLocking(tournament);
+      if (!validation.valid) {
+        showAlert('Cannot Lock Tournament', validation.message);
+        return;
+      }
+    }
 
     try {
       await tournamentsService.updateTournamentState(tournament.id, newState);
@@ -95,7 +106,8 @@ export default function TournamentDetailScreen() {
   }
 
   const isCreator = userId === tournament.createdByUserId;
-  const canEdit = isCreator && (tournament.state === 'draft' || tournament.state === 'inviting');
+  const canInvite = isCreator && (tournament.state === 'draft' || tournament.state === 'inviting');
+  const canLock = isCreator && tournament.state === 'inviting';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -194,7 +206,7 @@ export default function TournamentDetailScreen() {
             </Text>
             <Button
               title="Invite Players"
-              onPress={() => {/* TODO: Implement invite flow */}}
+              onPress={() => router.push(`/tournaments/invite?id=${tournament.id}`)}
               fullWidth
               variant="secondary"
               icon={<MaterialIcons name="person-add" size={20} color={Colors.textPrimary} />}
@@ -214,7 +226,7 @@ export default function TournamentDetailScreen() {
             </Text>
             <Button
               title="Invite More Players"
-              onPress={() => {/* TODO: Implement invite flow */}}
+              onPress={() => router.push(`/tournaments/invite?id=${tournament.id}`)}
               fullWidth
               variant="secondary"
               icon={<MaterialIcons name="person-add" size={20} color={Colors.textPrimary} />}
@@ -227,16 +239,28 @@ export default function TournamentDetailScreen() {
           </View>
         )}
 
-        {tournament.state === 'locked' && isCreator && (
+        {tournament.state === 'locked' && (
           <View style={styles.actionsCard}>
-            <Text style={styles.helperText}>
-              Tournament is locked. Ready to generate matches and start playing?
-            </Text>
-            <Button
-              title="Start Tournament"
-              onPress={() => handleStateChange('in_progress')}
-              fullWidth
-            />
+            {tournament.state === 'locked' && isCreator && (
+              <Text style={styles.helperText}>
+                Tournament is locked. No new participants can join. Ready to start?
+              </Text>
+            )}
+            {!isCreator && (
+              <View style={styles.lockedInfo}>
+                <MaterialIcons name="lock" size={20} color={Colors.textMuted} />
+                <Text style={styles.lockedText}>
+                  Tournament is locked. Participants finalized.
+                </Text>
+              </View>
+            )}
+            {isCreator && (
+              <Button
+                title="Start Tournament"
+                onPress={() => handleStateChange('in_progress')}
+                fullWidth
+              />
+            )}
           </View>
         )}
 
@@ -386,6 +410,21 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  lockedInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+  },
+  lockedText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
   },
   placeholderCard: {
     backgroundColor: Colors.surface,

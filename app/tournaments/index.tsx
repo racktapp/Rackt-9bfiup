@@ -5,9 +5,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
-import { Button, ScreenLoader, EmptyState, ErrorState } from '@/components';
+import { Button, ScreenLoader, EmptyState, ErrorState, UserAvatar, UserName } from '@/components';
 import { tournamentsService } from '@/services/tournaments';
-import { Tournament } from '@/types';
+import { Tournament, TournamentInvite } from '@/types';
 import { getSupabaseClient } from '@/template';
 
 const supabase = getSupabaseClient();
@@ -19,9 +19,11 @@ export default function TournamentsHomeScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [activeTournaments, setActiveTournaments] = useState<Tournament[]>([]);
   const [completedTournaments, setCompletedTournaments] = useState<Tournament[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<TournamentInvite[]>([]);
   const [isLoadingInitial, setIsLoadingInitial] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [respondingToInvite, setRespondingToInvite] = useState<string | null>(null);
 
   useEffect(() => {
     loadUserId();
@@ -42,9 +44,14 @@ export default function TournamentsHomeScreen() {
     if (!userId) return;
     try {
       setError(null);
-      const { active, completed } = await tournamentsService.listTournamentsForUser(userId);
-      setActiveTournaments(active);
-      setCompletedTournaments(completed);
+      const [tournamentsData, invitesData] = await Promise.all([
+        tournamentsService.listTournamentsForUser(userId),
+        tournamentsService.getPendingInvitesForUser(userId),
+      ]);
+
+      setActiveTournaments(tournamentsData.active);
+      setCompletedTournaments(tournamentsData.completed);
+      setPendingInvites(invitesData);
     } catch (err: any) {
       console.error('Error loading tournaments:', err);
       setError(err.message || 'Failed to load tournaments');
@@ -58,6 +65,19 @@ export default function TournamentsHomeScreen() {
     await loadTournaments();
     setRefreshing(false);
   }, [userId]);
+
+  const handleRespondToInvite = async (inviteId: string, accept: boolean) => {
+    setRespondingToInvite(inviteId);
+    try {
+      await tournamentsService.respondToInvite(inviteId, accept);
+      await loadTournaments();
+    } catch (err: any) {
+      console.error('Error responding to invite:', err);
+      setError(err.message || 'Failed to respond to invite');
+    } finally {
+      setRespondingToInvite(null);
+    }
+  };
 
   const getStateLabel = (state: Tournament['state']) => {
     switch (state) {
@@ -80,6 +100,67 @@ export default function TournamentsHomeScreen() {
       default: return Colors.textMuted;
     }
   };
+
+  const renderInviteCard = (invite: TournamentInvite & { tournament?: Tournament }) => (
+    <View key={invite.id} style={styles.inviteCard}>
+      <View style={styles.inviteHeader}>
+        <MaterialIcons name="mail" size={20} color={Colors.warning} />
+        <Text style={styles.inviteTitle}>Tournament Invitation</Text>
+      </View>
+
+      <View style={styles.inviteContent}>
+        <View style={styles.inviteInfo}>
+          <Text style={styles.inviteTournamentName}>{invite.tournament?.title || 'Tournament'}</Text>
+          <View style={styles.inviteMeta}>
+            <Text style={styles.inviteMetaText}>
+              {invite.tournament?.sport?.charAt(0).toUpperCase() + invite.tournament?.sport?.slice(1) || 'Sport'}
+            </Text>
+            <Text style={styles.inviteMetaDivider}>•</Text>
+            <Text style={styles.inviteMetaText}>
+              {invite.tournament?.type === 'americano' ? 'Americano' : 'Normal'}
+            </Text>
+            <Text style={styles.inviteMetaDivider}>•</Text>
+            <Text style={styles.inviteMetaText}>
+              {invite.tournament?.mode === 'singles' ? 'Singles' : 'Doubles'}
+            </Text>
+          </View>
+        </View>
+
+        {invite.invitedByUser && (
+          <View style={styles.invitedByRow}>
+            <UserAvatar
+              name={invite.invitedByUser.display_name || invite.invitedByUser.username}
+              avatarUrl={invite.invitedByUser.avatar_url}
+              size={24}
+            />
+            <Text style={styles.invitedByText}>
+              invited by{' '}
+              <Text style={styles.invitedByName}>
+                {invite.invitedByUser.display_name || invite.invitedByUser.username}
+              </Text>
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.inviteActions}>
+        <Pressable
+          style={[styles.inviteButton, styles.inviteButtonDecline]}
+          onPress={() => handleRespondToInvite(invite.id, false)}
+          disabled={respondingToInvite !== null}
+        >
+          <Text style={styles.inviteButtonTextDecline}>Decline</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.inviteButton, styles.inviteButtonAccept]}
+          onPress={() => handleRespondToInvite(invite.id, true)}
+          disabled={respondingToInvite !== null}
+        >
+          <Text style={styles.inviteButtonTextAccept}>Accept</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 
   const renderTournamentCard = (tournament: Tournament) => (
     <Pressable
@@ -164,6 +245,16 @@ export default function TournamentsHomeScreen() {
           />
         }
       >
+        {/* Pending Invites */}
+        {pendingInvites.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Invites</Text>
+            <View style={styles.invitesList}>
+              {pendingInvites.map(renderInviteCard)}
+            </View>
+          </View>
+        )}
+
         {/* Active Tournaments */}
         {activeTournaments.length > 0 && (
           <View style={styles.section}>
@@ -185,7 +276,7 @@ export default function TournamentsHomeScreen() {
         )}
 
         {/* Empty State */}
-        {activeTournaments.length === 0 && completedTournaments.length === 0 && (
+        {activeTournaments.length === 0 && completedTournaments.length === 0 && pendingInvites.length === 0 && (
           <EmptyState
             icon="🏆"
             title="No Tournaments Yet"
@@ -224,6 +315,93 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.lg,
     fontWeight: Typography.weights.semibold,
     color: Colors.textPrimary,
+  },
+  invitesList: {
+    gap: Spacing.md,
+  },
+  inviteCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    borderColor: Colors.warning,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  inviteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  inviteTitle: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.warning,
+  },
+  inviteContent: {
+    gap: Spacing.sm,
+  },
+  inviteInfo: {
+    gap: Spacing.xs,
+  },
+  inviteTournamentName: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+  },
+  inviteMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  inviteMetaText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+  },
+  inviteMetaDivider: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+  },
+  invitedByRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  invitedByText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+  },
+  invitedByName: {
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  inviteActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  inviteButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inviteButtonAccept: {
+    backgroundColor: Colors.primary,
+  },
+  inviteButtonDecline: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  inviteButtonTextAccept: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  inviteButtonTextDecline: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textMuted,
   },
   tournamentsList: {
     gap: Spacing.md,

@@ -22,7 +22,7 @@ export default function DashboardScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
 
   // Import tournaments component
-  const TournamentsHome = require('../../tournaments/index').default;
+  const TournamentsHome = require('../tournaments/index').default;
   const [events, setEvents] = useState<any[]>([]);
   const [pendingMatches, setPendingMatches] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);

@@ -8,6 +8,8 @@ import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
 import { ScreenLoader, EmptyState, ErrorState, Avatar } from '@/components';
 import { getSupabaseClient } from '@/template';
 import { userService } from '@/services/user';
+import { tournamentsService } from '@/services/tournaments';
+import { Tournament } from '@/types';
 import { normalizeMatchSets, calculateSetsWon } from '@/services/matchUtils';
 
 const supabase = getSupabaseClient();
@@ -28,6 +30,9 @@ export default function DashboardScreen() {
   const [stats, setStats] = useState<any>(null);
   const [lastActiveGroup, setLastActiveGroup] = useState<any>(null);
   const [recentResults, setRecentResults] = useState<any[]>([]);
+  const [activeTournament, setActiveTournament] = useState<Tournament | null>(null);
+  const [tournamentProgress, setTournamentProgress] = useState<any>(null);
+  const [recentTournaments, setRecentTournaments] = useState<any[]>([]);
   const [isLoadingInitial, setIsLoadingInitial] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +200,18 @@ export default function DashboardScreen() {
       );
 
       setRecentResults(resultsWithDetails.filter(Boolean));
+
+      // Get tournament summary
+      const activeTourn = await tournamentsService.getActiveTournamentForUser(userId);
+      setActiveTournament(activeTourn);
+      
+      if (activeTourn) {
+        const progress = await tournamentsService.getTournamentProgress(activeTourn);
+        setTournamentProgress(progress);
+      }
+
+      const recentTourns = await tournamentsService.getRecentCompletedTournamentsForUser(userId, 3);
+      setRecentTournaments(recentTourns);
 
     } catch (err) {
       console.error('Error loading overview:', err);
@@ -375,6 +392,163 @@ export default function DashboardScreen() {
         />
       }
     >
+      {/* Tournaments Summary */}
+      {(activeTournament || recentTournaments.length > 0) && (
+        <View style={styles.tournamentsCard}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.cardTitle}>TOURNAMENTS</Text>
+            <Pressable
+              style={styles.createTournamentButton}
+              onPress={() => {
+                setActiveTab('tournaments');
+                setTimeout(() => router.push('/tournaments/create'), 100);
+              }}
+            >
+              <MaterialIcons name="add" size={16} color={Colors.primary} />
+              <Text style={styles.createTournamentText}>Create</Text>
+            </Pressable>
+          </View>
+
+          {/* Active Tournament */}
+          {activeTournament && (
+            <Pressable
+              style={styles.activeTournamentCard}
+              onPress={() => router.push(`/tournaments/${activeTournament.id}`)}
+            >
+              <View style={styles.tournamentHeader}>
+                <View style={styles.tournamentTitleRow}>
+                  <Image
+                    source={activeTournament.sport === 'tennis' 
+                      ? require('@/assets/icons/tennis_icon.png')
+                      : require('@/assets/icons/padel_icon.png')
+                    }
+                    style={styles.tournamentSportIcon}
+                    contentFit="contain"
+                    transition={0}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.tournamentTitle} numberOfLines={1}>
+                      {activeTournament.title}
+                    </Text>
+                    <View style={styles.tournamentMeta}>
+                      <Text style={styles.tournamentMetaText}>
+                        {activeTournament.type === 'americano' ? 'Americano' : 'Tournament'}
+                      </Text>
+                      {activeTournament.isCompetitive && (
+                        <>
+                          <Text style={styles.metaDot}>•</Text>
+                          <MaterialIcons name="star" size={12} color={Colors.accentGold} />
+                          <Text style={[styles.tournamentMetaText, { color: Colors.accentGold }]}>
+                            Competitive
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
+                </View>
+                <View style={[styles.tournamentState, 
+                  activeTournament.state === 'in_progress' && { backgroundColor: Colors.success + '20' },
+                  activeTournament.state === 'locked' && { backgroundColor: Colors.primary + '20' },
+                  activeTournament.state === 'inviting' && { backgroundColor: Colors.warning + '20' },
+                ]}>
+                  <Text style={[styles.tournamentStateText,
+                    activeTournament.state === 'in_progress' && { color: Colors.success },
+                    activeTournament.state === 'locked' && { color: Colors.primary },
+                    activeTournament.state === 'inviting' && { color: Colors.warning },
+                  ]}>
+                    {activeTournament.state === 'in_progress' ? 'In Progress' :
+                     activeTournament.state === 'locked' ? 'Locked' :
+                     activeTournament.state === 'inviting' ? 'Inviting' : 'Draft'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.tournamentDetails}>
+                <View style={styles.tournamentDetailRow}>
+                  <MaterialIcons name="people" size={14} color={Colors.textMuted} />
+                  <Text style={styles.tournamentDetailText}>
+                    {activeTournament.participants.length} players
+                  </Text>
+                </View>
+                {tournamentProgress && (
+                  <View style={styles.tournamentDetailRow}>
+                    <MaterialIcons name="info-outline" size={14} color={Colors.textMuted} />
+                    <Text style={styles.tournamentDetailText}>
+                      {tournamentProgress.stage
+                        ? `Stage: ${tournamentProgress.stage}`
+                        : `Rounds: ${tournamentProgress.roundsCompleted} / ${tournamentProgress.totalRounds}`
+                      }
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.tournamentCTA}>
+                <Text style={styles.tournamentCTAText}>Open</Text>
+                <MaterialIcons name="chevron-right" size={16} color={Colors.primary} />
+              </View>
+            </Pressable>
+          )}
+
+          {/* Recent Completed Tournaments */}
+          {recentTournaments.length > 0 && (
+            <View style={styles.recentTournamentsSection}>
+              {activeTournament && (
+                <Text style={styles.recentTournamentsTitle}>Recent Completed</Text>
+              )}
+              {recentTournaments.map((tournament) => (
+                <Pressable
+                  key={tournament.id}
+                  style={styles.completedTournamentRow}
+                  onPress={() => router.push(`/tournaments/${tournament.id}`)}
+                >
+                  <Image
+                    source={tournament.sport === 'tennis' 
+                      ? require('@/assets/icons/tennis_icon.png')
+                      : require('@/assets/icons/padel_icon.png')
+                    }
+                    style={styles.completedTournamentIcon}
+                    contentFit="contain"
+                    transition={0}
+                  />
+                  <View style={styles.completedTournamentInfo}>
+                    <Text style={styles.completedTournamentTitle} numberOfLines={1}>
+                      {tournament.title}
+                    </Text>
+                    <View style={styles.completedTournamentMeta}>
+                      <Text style={styles.completedTournamentMetaText}>
+                        {tournament.type === 'americano' ? 'Americano' : 'Tournament'}
+                      </Text>
+                      {tournament.placement && (
+                        <>
+                          <Text style={styles.metaDot}>•</Text>
+                          <Text style={styles.completedTournamentPlacement}>
+                            {tournament.placement}
+                          </Text>
+                        </>
+                      )}
+                      {tournament.ratingDelta !== undefined && (
+                        <>
+                          <Text style={styles.metaDot}>•</Text>
+                          <Text style={[
+                            styles.completedTournamentDelta,
+                            tournament.ratingDelta > 0 && { color: Colors.success },
+                            tournament.ratingDelta < 0 && { color: Colors.danger },
+                          ]}>
+                            {tournament.ratingDelta > 0 ? '+' : ''}{tournament.ratingDelta.toFixed(1)}
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={20} color={Colors.textMuted} />
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
       {/* Quick Actions */}
       <View style={styles.actionsCard}>
         <Text style={styles.cardTitle}>QUICK ACTIONS</Text>
@@ -925,5 +1099,164 @@ const styles = StyleSheet.create({
   resultSport: {
     fontSize: Typography.sizes.xs,
     color: Colors.textMuted,
+  },
+
+  // Tournament styles
+  tournamentsCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  createTournamentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  createTournamentText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.primary,
+  },
+  activeTournamentCard: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  tournamentHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  tournamentTitleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  tournamentSportIcon: {
+    width: 20,
+    height: 20,
+  },
+  tournamentTitle: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  tournamentMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  tournamentMetaText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+  },
+  metaDot: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+  },
+  tournamentState: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+  },
+  tournamentStateText: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+  },
+  tournamentDetails: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  tournamentDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tournamentDetailText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+  },
+  tournamentCTA: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingTop: Spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  tournamentCTAText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.primary,
+  },
+  recentTournamentsSection: {
+    gap: Spacing.sm,
+  },
+  recentTournamentsTitle: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textMuted,
+    letterSpacing: 0.5,
+  },
+  completedTournamentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.sm,
+  },
+  completedTournamentIcon: {
+    width: 16,
+    height: 16,
+  },
+  completedTournamentInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  completedTournamentTitle: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textPrimary,
+  },
+  completedTournamentMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  completedTournamentMetaText: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+  },
+  completedTournamentPlacement: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textPrimary,
+  },
+  completedTournamentDelta: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.bold,
   },
 });

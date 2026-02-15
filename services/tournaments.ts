@@ -880,6 +880,132 @@ export const tournamentsService = {
     return sorted;
   },
 
+  // Dashboard summary helpers
+  async getActiveTournamentForUser(userId: string): Promise<Tournament | null> {
+    const { active } = await this.listTournamentsForUser(userId);
+    
+    if (active.length === 0) return null;
+
+    // Priority order: in_progress > locked > inviting > draft
+    const inProgress = active.find(t => t.state === 'in_progress');
+    if (inProgress) return inProgress;
+
+    const locked = active.find(t => t.state === 'locked');
+    if (locked) return locked;
+
+    const inviting = active.find(t => t.state === 'inviting');
+    if (inviting) return inviting;
+
+    return active[0]; // Return first (draft)
+  },
+
+  async getTournamentProgress(tournament: Tournament): Promise<{ stage?: string; roundsCompleted?: number; totalRounds?: number }> {
+    const matches = await this.getMatchesByTournament(tournament.id);
+    
+    if (tournament.type === 'americano') {
+      const confirmedMatches = matches.filter(m => m.status === 'confirmed').length;
+      const totalMatches = matches.length;
+      return {
+        roundsCompleted: confirmedMatches,
+        totalRounds: totalMatches,
+      };
+    } else {
+      // Normal tournament
+      const playoffMatches = matches.filter(m => m.stage === 'playoff');
+      
+      if (playoffMatches.length > 0 && playoffMatches.some(m => m.status === 'pending' || m.status === 'confirmed')) {
+        return { stage: 'Playoffs' };
+      }
+      
+      return { stage: 'Groups' };
+    }
+  },
+
+  async getRecentCompletedTournamentsForUser(userId: string, limit: number = 3): Promise<Array<Tournament & { placement?: string; ratingDelta?: number }>> {
+    const { completed } = await this.listTournamentsForUser(userId);
+    
+    const tournamentsWithPlacement = await Promise.all(
+      completed.slice(0, limit).map(async (tournament) => {
+        let placement: string | undefined;
+        let ratingDelta: number | undefined;
+
+        try {
+          if (tournament.type === 'americano') {
+            // Get americano leaderboard
+            const leaderboard = await this.getAmericanoLeaderboard(tournament.id);
+            const userEntry = leaderboard.find(e => e.participant.userId === userId);
+            
+            if (userEntry) {
+              placement = `Placed #${userEntry.rank} of ${leaderboard.length}`;
+            }
+          } else {
+            // Get normal tournament placement
+            const matches = await this.getMatchesByTournament(tournament.id);
+            const playoffMatches = matches.filter(m => m.stage === 'playoff' && m.status === 'confirmed');
+            
+            if (playoffMatches.length > 0) {
+              // Find final match
+              const maxRound = Math.max(...playoffMatches.map(m => m.roundIndex));
+              const finalMatch = playoffMatches.find(m => m.roundIndex === maxRound);
+              
+              if (finalMatch) {
+                const userInTeamA = finalMatch.teamA.memberUserIds.includes(userId);
+                const userInTeamB = finalMatch.teamB.memberUserIds.includes(userId);
+                
+                if (userInTeamA) {
+                  placement = finalMatch.winner === 'A' ? 'Winner' : 'Finalist';
+                } else if (userInTeamB) {
+                  placement = finalMatch.winner === 'B' ? 'Winner' : 'Finalist';
+                }
+                
+                // Check semis
+                if (!placement) {
+                  const semiMatches = playoffMatches.filter(m => m.roundIndex === maxRound - 1);
+                  for (const semi of semiMatches) {
+                    if (semi.teamA.memberUserIds.includes(userId) || semi.teamB.memberUserIds.includes(userId)) {
+                      placement = 'Semi-finalist';
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+            
+            if (!placement) {
+              placement = 'Completed';
+            }
+          }
+
+          // Get rating delta if competitive
+          if (tournament.isCompetitive) {
+            const { data: historyEntry } = await supabase
+              .from('rating_history')
+              .select('previous_level, new_level')
+              .eq('user_id', userId)
+              .eq('sport', tournament.sport)
+              .contains('metadata', { tournament_id: tournament.id })
+              .single();
+
+            if (historyEntry) {
+              const delta = historyEntry.new_level - historyEntry.previous_level;
+              ratingDelta = Math.round(delta * 10) / 10;
+            }
+          }
+        } catch (err) {
+          console.error('Error computing tournament placement:', err);
+        }
+
+        return {
+          ...tournament,
+          placement,
+          ratingDelta,
+        };
+      })
+    );
+
+    return tournamentsWithPlacement;
+  },
+
   async completeAmericanoTournament(tournamentId: string): Promise<{ ratingDeltas?: Array<{ userId: string; displayName: string; delta: number }> }> {
     const tournament = await this.getTournamentById(tournamentId);
     

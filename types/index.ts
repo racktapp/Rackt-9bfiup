@@ -207,3 +207,20 @@ export interface TournamentStanding {
   setsLost: number;
   setDiff: number;
 }
+
+export interface AmericanoRound {
+  id: string;
+  tournamentId: string;
+  roundNumber: number;
+  matches: TournamentMatch[];
+  createdAt: string;
+}
+
+export interface AmericanoLeaderboardEntry {
+  participant: TournamentParticipant;
+  totalPointsFor: number;
+  totalPointsAgainst: number;
+  pointDiff: number;
+  matchesPlayed: number;
+  rank: number;
+}

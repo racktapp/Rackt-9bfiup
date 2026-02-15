@@ -6,7 +6,9 @@ import {
   TournamentGroup,
   TournamentMatch,
   TournamentTeam,
-  TournamentStanding
+  TournamentStanding,
+  AmericanoRound,
+  AmericanoLeaderboardEntry
 } from '@/types';
 import { Sport } from '@/constants/config';
 
@@ -701,5 +703,319 @@ export const tournamentsService = {
       createdAt: raw.created_at,
       updatedAt: raw.updated_at,
     };
+  },
+
+  // Americano tournament generation
+  async generateAmericanoTournament(tournamentId: string): Promise<void> {
+    const tournament = await this.getTournamentById(tournamentId);
+    
+    if (tournament.type !== 'americano') {
+      throw new Error('Can only generate americano tournaments');
+    }
+
+    if (tournament.state !== 'locked') {
+      throw new Error('Tournament must be locked before generation');
+    }
+
+    const playerCount = tournament.participants.length;
+
+    // Must be even
+    if (playerCount % 2 !== 0) {
+      throw new Error('Americano tournaments require an even number of players');
+    }
+
+    // Calculate number of rounds (default min(6, participantCount - 1))
+    const defaultRounds = Math.min(6, playerCount - 1);
+    const roundCount = tournament.settings?.americano?.rounds || defaultRounds;
+    const pointsToWin = tournament.settings?.americano?.pointsToWin || 21;
+
+    // Generate rounds with rotation algorithm
+    for (let roundNum = 0; roundNum < roundCount; roundNum++) {
+      await this.generateAmericanoRound(tournament, roundNum, pointsToWin);
+    }
+
+    // Update tournament state
+    await this.updateTournamentState(tournamentId, 'in_progress');
+  },
+
+  async generateAmericanoRound(tournament: Tournament, roundNum: number, pointsToWin: number): Promise<void> {
+    const participants = [...tournament.participants];
+    const matches: any[] = [];
+
+    // Rotation algorithm: rotate list each round, pair adjacent, first half vs second half
+    // Round 0: original order
+    // Round 1+: rotate by roundNum positions
+    if (roundNum > 0) {
+      const rotated = participants.slice(roundNum).concat(participants.slice(0, roundNum));
+      participants.splice(0, participants.length, ...rotated);
+    }
+
+    const half = Math.floor(participants.length / 2);
+    const firstHalf = participants.slice(0, half);
+    const secondHalf = participants.slice(half);
+
+    // Create matches: first half vs second half
+    for (let i = 0; i < firstHalf.length; i++) {
+      // Pair adjacent in first half for team A
+      const teamAIdx1 = i;
+      const teamAIdx2 = (i + 1) % firstHalf.length;
+      
+      // Pair adjacent in second half for team B
+      const teamBIdx1 = i;
+      const teamBIdx2 = (i + 1) % secondHalf.length;
+
+      const teamA: TournamentTeam = {
+        memberUserIds: [firstHalf[teamAIdx1].userId, firstHalf[teamAIdx2].userId],
+        members: [firstHalf[teamAIdx1], firstHalf[teamAIdx2]],
+      };
+
+      const teamB: TournamentTeam = {
+        memberUserIds: [secondHalf[teamBIdx1].userId, secondHalf[teamBIdx2].userId],
+        members: [secondHalf[teamBIdx1], secondHalf[teamBIdx2]],
+      };
+
+      matches.push({
+        tournament_id: tournament.id,
+        stage: 'group',  // Americano uses 'group' stage for all rounds
+        group_id: null,
+        round_index: roundNum,
+        team_a: teamA,
+        team_b: teamB,
+        score: [],  // Will store [{a: pointsA, b: pointsB}]
+        status: 'pending',
+        confirmed_by_user_ids: [],
+        winner: null,
+      });
+    }
+
+    if (matches.length > 0) {
+      await supabase.from('tournament_matches').insert(matches);
+    }
+  },
+
+  async submitAmericanoMatchPoints(matchId: string, pointsA: number, pointsB: number): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const winner = pointsA > pointsB ? 'A' : pointsB > pointsA ? 'B' : null;
+
+    const { error } = await supabase
+      .from('tournament_matches')
+      .update({
+        score: [{ a: pointsA, b: pointsB }],
+        winner,
+        status: 'submitted',
+        submitted_by_user_id: user.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', matchId);
+
+    if (error) throw error;
+  },
+
+  async getAmericanoLeaderboard(tournamentId: string): Promise<AmericanoLeaderboardEntry[]> {
+    const tournament = await this.getTournamentById(tournamentId);
+    const matches = await this.getMatchesByTournament(tournamentId);
+
+    // Initialize leaderboard
+    const leaderboard: Map<string, AmericanoLeaderboardEntry> = new Map();
+    
+    for (const participant of tournament.participants) {
+      leaderboard.set(participant.userId, {
+        participant,
+        totalPointsFor: 0,
+        totalPointsAgainst: 0,
+        pointDiff: 0,
+        matchesPlayed: 0,
+        rank: 0,
+      });
+    }
+
+    // Calculate from confirmed matches
+    for (const match of matches) {
+      if (match.status !== 'confirmed' || match.score.length === 0) continue;
+
+      const pointsA = match.score[0].a;
+      const pointsB = match.score[0].b;
+      const teamAUserIds = match.teamA.memberUserIds;
+      const teamBUserIds = match.teamB.memberUserIds;
+
+      // Update Team A players
+      for (const userId of teamAUserIds) {
+        const entry = leaderboard.get(userId);
+        if (entry) {
+          entry.totalPointsFor += pointsA;
+          entry.totalPointsAgainst += pointsB;
+          entry.matchesPlayed++;
+        }
+      }
+
+      // Update Team B players
+      for (const userId of teamBUserIds) {
+        const entry = leaderboard.get(userId);
+        if (entry) {
+          entry.totalPointsFor += pointsB;
+          entry.totalPointsAgainst += pointsA;
+          entry.matchesPlayed++;
+        }
+      }
+    }
+
+    // Calculate point diff and sort
+    const sorted = Array.from(leaderboard.values()).map(entry => ({
+      ...entry,
+      pointDiff: entry.totalPointsFor - entry.totalPointsAgainst,
+    })).sort((a, b) => {
+      if (b.totalPointsFor !== a.totalPointsFor) {
+        return b.totalPointsFor - a.totalPointsFor;
+      }
+      return b.pointDiff - a.pointDiff;
+    });
+
+    // Assign ranks
+    sorted.forEach((entry, idx) => {
+      entry.rank = idx + 1;
+    });
+
+    return sorted;
+  },
+
+  async completeAmericanoTournament(tournamentId: string): Promise<{ ratingDeltas?: Array<{ userId: string; displayName: string; delta: number }> }> {
+    const tournament = await this.getTournamentById(tournamentId);
+    
+    if (tournament.type !== 'americano') {
+      throw new Error('Can only complete americano tournaments');
+    }
+
+    // Check all matches are confirmed
+    const matches = await this.getMatchesByTournament(tournamentId);
+    const allConfirmed = matches.every(m => m.status === 'confirmed');
+    
+    if (!allConfirmed) {
+      throw new Error('All matches must be confirmed before completing tournament');
+    }
+
+    // Update tournament state
+    await this.updateTournamentState(tournamentId, 'completed');
+
+    // If competitive, apply rating changes based on final placement
+    if (!tournament.isCompetitive) {
+      return {};
+    }
+
+    const leaderboard = await this.getAmericanoLeaderboard(tournamentId);
+    const N = leaderboard.length;
+    const K = 0.20; // Americano K-factor
+
+    // Get current ratings for all participants
+    const { data: ratings } = await supabase
+      .from('user_ratings')
+      .select('user_id, level, sport')
+      .eq('sport', tournament.sport)
+      .in('user_id', tournament.participants.map(p => p.userId));
+
+    const ratingMap = new Map<string, number>();
+    for (const rating of ratings || []) {
+      ratingMap.set(rating.user_id, rating.level);
+    }
+
+    // Compute expected placement for each player based on rating
+    const playersWithRatings = leaderboard.map(entry => ({
+      ...entry,
+      currentRating: ratingMap.get(entry.participant.userId) || 2.5,
+    }));
+
+    // Calculate average rating
+    const avgRating = playersWithRatings.reduce((sum, p) => sum + p.currentRating, 0) / N;
+
+    // Compute rating deltas
+    const ratingDeltas: Array<{ userId: string; displayName: string; delta: number }> = [];
+    const ratingUpdates: any[] = [];
+    const historyEntries: any[] = [];
+
+    for (const entry of playersWithRatings) {
+      // Expected placement based on rating (higher rating = lower expected placement number)
+      const ratingDiffFromAvg = entry.currentRating - avgRating;
+      const expectedPlacement = (N + 1) / 2 - (ratingDiffFromAvg * (N - 1) / 2);
+      
+      // Actual placement
+      const actualPlacement = entry.rank;
+
+      // Delta calculation
+      let delta = K * (expectedPlacement - actualPlacement) / (N - 1);
+      
+      // Clamp delta
+      delta = Math.max(-0.25, Math.min(0.25, delta));
+
+      const newLevel = Math.max(0.0, Math.min(7.0, entry.currentRating + delta));
+
+      ratingDeltas.push({
+        userId: entry.participant.userId,
+        displayName: entry.participant.displayName,
+        delta: Math.round(delta * 10) / 10,
+      });
+
+      // Prepare rating update
+      ratingUpdates.push({
+        user_id: entry.participant.userId,
+        sport: tournament.sport,
+        new_level: newLevel,
+      });
+
+      // Prepare rating history entry
+      historyEntries.push({
+        user_id: entry.participant.userId,
+        match_id: null,
+        sport: tournament.sport,
+        previous_level: entry.currentRating,
+        new_level: newLevel,
+        previous_reliability: 0.5, // Placeholder
+        new_reliability: 0.5, // Placeholder
+        metadata: {
+          tournament_id: tournamentId,
+          tournament_title: tournament.title,
+          placement: actualPlacement,
+          reason: 'Americano tournament final placement',
+        },
+      });
+    }
+
+    // Apply rating updates
+    for (const update of ratingUpdates) {
+      const { data: existing } = await supabase
+        .from('user_ratings')
+        .select('*')
+        .eq('user_id', update.user_id)
+        .eq('sport', update.sport)
+        .single();
+
+      if (existing) {
+        await supabase
+          .from('user_ratings')
+          .update({ 
+            level: update.new_level,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', update.user_id)
+          .eq('sport', update.sport);
+      } else {
+        await supabase
+          .from('user_ratings')
+          .insert({
+            user_id: update.user_id,
+            sport: update.sport,
+            level: update.new_level,
+            reliability: 0.5,
+            matches_played: 0,
+          });
+      }
+    }
+
+    // Insert rating history
+    if (historyEntries.length > 0) {
+      await supabase.from('rating_history').insert(historyEntries);
+    }
+
+    return { ratingDeltas: ratingDeltas.sort((a, b) => b.delta - a.delta).slice(0, 5) };
   },
 };

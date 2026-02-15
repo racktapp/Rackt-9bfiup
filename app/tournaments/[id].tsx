@@ -5,15 +5,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
-import { Button, UserAvatar, UserName, ScreenLoader, ErrorState } from '@/components';
+import { Button, UserAvatar, UserName, ScreenLoader, ErrorState, LoadingSpinner } from '@/components';
 import { tournamentsService } from '@/services/tournaments';
-import { Tournament, TournamentGroup, TournamentMatch, TournamentStanding } from '@/types';
+import { Tournament, TournamentGroup, TournamentMatch, TournamentStanding, AmericanoLeaderboardEntry } from '@/types';
 import { getSupabaseClient } from '@/template';
 import { useAlert } from '@/template';
 
 const supabase = getSupabaseClient();
 
-type TabType = 'overview' | 'groups' | 'playoffs' | 'matches';
+type TabType = 'overview' | 'groups' | 'playoffs' | 'matches' | 'rounds' | 'leaderboard' | 'players';
 
 export default function TournamentDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -30,6 +30,9 @@ export default function TournamentDetailScreen() {
   const [groupMatches, setGroupMatches] = useState<TournamentMatch[]>([]);
   const [playoffMatches, setPlayoffMatches] = useState<TournamentMatch[]>([]);
   const [allMatches, setAllMatches] = useState<TournamentMatch[]>([]);
+  const [americanoLeaderboard, setAmericanoLeaderboard] = useState<AmericanoLeaderboardEntry[]>([]);
+  const [completingTournament, setCompletingTournament] = useState(false);
+  const [ratingDeltas, setRatingDeltas] = useState<Array<{ userId: string; displayName: string; delta: number }> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,17 +82,24 @@ export default function TournamentDetailScreen() {
     if (!tournament || !id || typeof id !== 'string') return;
 
     try {
-      const [groupsData, matchesData] = await Promise.all([
-        tournamentsService.getGroupsByTournament(id),
-        tournamentsService.getMatchesByTournament(id),
-      ]);
-
-      setGroups(groupsData);
-      setAllMatches(matchesData);
-      setPlayoffMatches(matchesData.filter(m => m.stage === 'playoff'));
-
-      if (groupsData.length > 0 && !selectedGroupId) {
-        setSelectedGroupId(groupsData[0].id);
+      if (tournament.type === 'americano') {
+        const [matchesData, leaderboardData] = await Promise.all([
+          tournamentsService.getMatchesByTournament(id),
+          tournamentsService.getAmericanoLeaderboard(id),
+        ]);
+        setAllMatches(matchesData);
+        setAmericanoLeaderboard(leaderboardData);
+      } else {
+        const [groupsData, matchesData] = await Promise.all([
+          tournamentsService.getGroupsByTournament(id),
+          tournamentsService.getMatchesByTournament(id),
+        ]);
+        setGroups(groupsData);
+        setAllMatches(matchesData);
+        setPlayoffMatches(matchesData.filter(m => m.stage === 'playoff'));
+        if (groupsData.length > 0 && !selectedGroupId) {
+          setSelectedGroupId(groupsData[0].id);
+        }
       }
     } catch (err: any) {
       console.error('Error loading tournament data:', err);
@@ -116,10 +126,14 @@ export default function TournamentDetailScreen() {
     if (!tournament) return;
 
     try {
-      await tournamentsService.generateNormalTournament(tournament.id);
+      if (tournament.type === 'americano') {
+        await tournamentsService.generateAmericanoTournament(tournament.id);
+      } else {
+        await tournamentsService.generateNormalTournament(tournament.id);
+      }
       await loadTournament();
       await loadTournamentData();
-      setActiveTab('groups');
+      setActiveTab(tournament.type === 'americano' ? 'rounds' : 'groups');
     } catch (err: any) {
       console.error('Error starting tournament:', err);
       showAlert('Error', err.message || 'Failed to start tournament');
@@ -156,6 +170,27 @@ export default function TournamentDetailScreen() {
     } catch (err: any) {
       console.error('Error updating tournament:', err);
       setError(err.message || 'Failed to update tournament');
+    }
+  };
+
+  const handleCompleteTournament = async () => {
+    if (!tournament) return;
+
+    setCompletingTournament(true);
+    try {
+      const result = await tournamentsService.completeAmericanoTournament(tournament.id);
+      await loadTournament();
+      
+      if (result.ratingDeltas && result.ratingDeltas.length > 0) {
+        setRatingDeltas(result.ratingDeltas);
+      } else {
+        showAlert('Success', 'Tournament completed successfully');
+      }
+    } catch (err: any) {
+      console.error('Error completing tournament:', err);
+      showAlert('Error', err.message || 'Failed to complete tournament');
+    } finally {
+      setCompletingTournament(false);
     }
   };
 
@@ -286,7 +321,7 @@ export default function TournamentDetailScreen() {
             {isCreator && (
               <>
                 <Text style={styles.helperText}>
-                  Tournament is locked. Ready to generate groups and matches?
+                  Tournament is locked. Ready to generate {tournament.type === 'americano' ? 'rounds' : 'groups and matches'}?
                 </Text>
                 <Button
                   title="Start Tournament"
@@ -311,10 +346,199 @@ export default function TournamentDetailScreen() {
             <MaterialIcons name="emoji-events" size={48} color={Colors.accentGold} />
             <Text style={styles.placeholderTitle}>Tournament Completed!</Text>
             <Text style={styles.placeholderText}>
-              Check the Groups and Playoffs tabs for final results
+              {tournament.type === 'americano' 
+                ? 'Check the Leaderboard tab for final results'
+                : 'Check the Groups and Playoffs tabs for final results'}
             </Text>
           </View>
         )}
+      </ScrollView>
+    );
+  };
+
+  const renderRoundsTab = () => {
+    if (allMatches.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Rounds will appear after tournament starts</Text>
+        </View>
+      );
+    }
+
+    // Group matches by round
+    const rounds = new Map<number, TournamentMatch[]>();
+    for (const match of allMatches) {
+      if (!rounds.has(match.roundIndex)) {
+        rounds.set(match.roundIndex, []);
+      }
+      rounds.get(match.roundIndex)!.push(match);
+    }
+
+    const sortedRounds = Array.from(rounds.entries()).sort((a, b) => a[0] - b[0]);
+
+    return (
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {sortedRounds.map(([roundNum, matches]) => (
+          <View key={roundNum} style={styles.roundSection}>
+            <Text style={styles.roundTitle}>Round {roundNum + 1}</Text>
+            <View style={styles.matchesCard}>
+              {matches.map(match => renderMatchCard(match))}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    );
+  };
+
+  const renderLeaderboardTab = () => {
+    if (americanoLeaderboard.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Leaderboard will appear after matches are played</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.standingsCard}>
+          <Text style={styles.cardTitle}>Leaderboard</Text>
+          <View style={styles.standingsTable}>
+            <View style={styles.standingsHeader}>
+              <Text style={[styles.standingsHeaderText, { flex: 2 }]}>Player</Text>
+              <Text style={styles.standingsHeaderText}>Points</Text>
+              <Text style={styles.standingsHeaderText}>Diff</Text>
+              <Text style={styles.standingsHeaderText}>Played</Text>
+            </View>
+            {americanoLeaderboard.map((entry, idx) => (
+              <View key={entry.participant.userId} style={styles.standingsRow}>
+                <View style={[
+                  styles.standingsRank,
+                  idx < 3 && { backgroundColor: Colors.accentGold + '30' },
+                ]}>
+                  <Text style={[
+                    styles.standingsRankText,
+                    idx < 3 && { color: Colors.accentGold },
+                  ]}>
+                    {idx + 1}
+                  </Text>
+                </View>
+                <Text style={[styles.standingsPlayerText, { flex: 2 }]} numberOfLines={1}>
+                  {entry.participant.displayName}
+                </Text>
+                <Text style={styles.standingsStatText}>{entry.totalPointsFor}</Text>
+                <Text style={[
+                  styles.standingsStatText,
+                  entry.pointDiff > 0 && { color: Colors.success },
+                  entry.pointDiff < 0 && { color: Colors.danger },
+                ]}>
+                  {entry.pointDiff > 0 ? '+' : ''}{entry.pointDiff}
+                </Text>
+                <Text style={styles.standingsStatText}>{entry.matchesPlayed}</Text>
+              </View>
+            ))}</View>
+        </View>
+
+        {/* Complete Tournament Button */}
+        {tournament && tournament.state === 'in_progress' && userId === tournament.createdByUserId && (
+          <View style={styles.actionsCard}>
+            <Text style={styles.helperText}>
+              Complete the tournament when all rounds are finished
+            </Text>
+            <Button
+              title={completingTournament ? 'Completing...' : 'Complete Tournament'}
+              onPress={handleCompleteTournament}
+              fullWidth
+              disabled={completingTournament}
+              icon={completingTournament ? <LoadingSpinner size={20} /> : undefined}
+            />
+          </View>
+        )}
+
+        {/* Rating Summary Modal */}
+        {ratingDeltas && (
+          <View style={styles.ratingSummaryCard}>
+            <View style={styles.ratingSummaryHeader}>
+              <MaterialIcons name="emoji-events" size={32} color={Colors.accentGold} />
+              <Text style={styles.ratingSummaryTitle}>Rating Changes Applied</Text>
+            </View>
+            <Text style={styles.ratingSummarySubtitle}>
+              Based on final leaderboard placements
+            </Text>
+            <View style={styles.ratingDeltasList}>
+              {ratingDeltas.map((delta, idx) => (
+                <View key={delta.userId} style={styles.ratingDeltaRow}>
+                  <Text style={styles.ratingDeltaRank}>#{idx + 1}</Text>
+                  <Text style={styles.ratingDeltaName} numberOfLines={1}>
+                    {delta.displayName}
+                  </Text>
+                  <Text style={[
+                    styles.ratingDeltaValue,
+                    delta.delta > 0 && { color: Colors.success },
+                    delta.delta < 0 && { color: Colors.danger },
+                  ]}>
+                    {delta.delta > 0 ? '+' : ''}{delta.delta}
+                  </Text>
+                </View>
+              ))}</View>
+            <Button
+              title="Dismiss"
+              onPress={() => setRatingDeltas(null)}
+              variant="secondary"
+              fullWidth
+            />
+          </View>
+        )}
+      </ScrollView>
+    );
+  };
+
+  const renderPlayersTab = () => {
+    if (!tournament) return null;
+
+    return (
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.participantsCard}>
+          <Text style={styles.cardTitle}>
+            All Players ({tournament.participants.length})
+          </Text>
+          <View style={styles.participantsList}>
+            {tournament.participants.map((participant) => (
+              <View key={participant.userId} style={styles.participantRow}>
+                <UserAvatar
+                  name={participant.displayName}
+                  avatarUrl={participant.avatarUrl}
+                  size={40}
+                />
+                <UserName
+                  profile={{
+                    id: participant.userId,
+                    displayName: participant.displayName,
+                    username: participant.username,
+                  }}
+                  displayNameStyle={styles.participantName}
+                />
+                {participant.userId === tournament.createdByUserId && (
+                  <View style={styles.creatorBadge}>
+                    <Text style={styles.creatorBadgeText}>Creator</Text>
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+        </View>
       </ScrollView>
     );
   };
@@ -446,7 +670,9 @@ export default function TournamentDetailScreen() {
   const renderMatchCard = (match: TournamentMatch) => {
     const teamANames = match.teamA.members?.map(m => m.displayName).join(' / ') || 'Team A';
     const teamBNames = match.teamB.members?.map(m => m.displayName).join(' / ') || 'Team B';
-    const scoreDisplay = match.score.map(s => `${s.a}–${s.b}`).join(' ');
+    const scoreDisplay = tournament?.type === 'americano' && match.score.length > 0
+      ? `${match.score[0].a} - ${match.score[0].b}`
+      : match.score.map(s => `${s.a}–${s.b}`).join(' ');
     
     const isParticipant = match.teamA.memberUserIds.includes(userId || '') || 
                           match.teamB.memberUserIds.includes(userId || '');
@@ -458,7 +684,9 @@ export default function TournamentDetailScreen() {
         <View style={styles.matchHeader}>
           <View style={styles.matchStage}>
             <Text style={styles.matchStageText}>
-              {match.stage === 'group' ? 'Group Stage' : 'Playoff'}
+              {tournament?.type === 'americano' 
+                ? `Round ${match.roundIndex + 1}`
+                : match.stage === 'group' ? 'Group Stage' : 'Playoff'}
             </Text>
           </View>
           <View style={[
@@ -486,8 +714,12 @@ export default function TournamentDetailScreen() {
 
         {match.status === 'pending' && isParticipant && (
           <Button
-            title="Enter Score"
-            onPress={() => router.push(`/tournaments/match-score?matchId=${match.id}`)}
+            title={tournament?.type === 'americano' ? 'Enter Points' : 'Enter Score'}
+            onPress={() => router.push(
+              tournament?.type === 'americano' 
+                ? `/tournaments/americano-points?matchId=${match.id}`
+                : `/tournaments/match-score?matchId=${match.id}`
+            )}
             variant="secondary"
             fullWidth
             icon={<MaterialIcons name="edit" size={16} color={Colors.textPrimary} />}
@@ -543,6 +775,7 @@ export default function TournamentDetailScreen() {
   }
 
   const showTabs = tournament.state === 'in_progress' || tournament.state === 'completed';
+  const isAmericano = tournament.type === 'americano';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -555,7 +788,12 @@ export default function TournamentDetailScreen() {
       </View>
 
       {showTabs && (
-        <View style={styles.tabs}>
+        <ScrollView 
+          horizontal 
+          style={styles.tabs}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: Spacing.sm }}
+        >
           <Pressable
             style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
             onPress={() => setActiveTab('overview')}
@@ -564,34 +802,69 @@ export default function TournamentDetailScreen() {
               Overview
             </Text>
           </Pressable>
-          <Pressable
-            style={[styles.tab, activeTab === 'groups' && styles.tabActive]}
-            onPress={() => setActiveTab('groups')}
-          >
-            <Text style={[styles.tabText, activeTab === 'groups' && styles.tabTextActive]}>
-              Groups
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tab, activeTab === 'playoffs' && styles.tabActive]}
-            onPress={() => setActiveTab('playoffs')}
-          >
-            <Text style={[styles.tabText, activeTab === 'playoffs' && styles.tabTextActive]}>
-              Playoffs
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tab, activeTab === 'matches' && styles.tabActive]}
-            onPress={() => setActiveTab('matches')}
-          >
-            <Text style={[styles.tabText, activeTab === 'matches' && styles.tabTextActive]}>
-              Matches
-            </Text>
-          </Pressable>
-        </View>
+          
+          {isAmericano ? (
+            <>
+              <Pressable
+                style={[styles.tab, activeTab === 'rounds' && styles.tabActive]}
+                onPress={() => setActiveTab('rounds')}
+              >
+                <Text style={[styles.tabText, activeTab === 'rounds' && styles.tabTextActive]}>
+                  Rounds
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tab, activeTab === 'leaderboard' && styles.tabActive]}
+                onPress={() => setActiveTab('leaderboard')}
+              >
+                <Text style={[styles.tabText, activeTab === 'leaderboard' && styles.tabTextActive]}>
+                  Leaderboard
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tab, activeTab === 'players' && styles.tabActive]}
+                onPress={() => setActiveTab('players')}
+              >
+                <Text style={[styles.tabText, activeTab === 'players' && styles.tabTextActive]}>
+                  Players
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Pressable
+                style={[styles.tab, activeTab === 'groups' && styles.tabActive]}
+                onPress={() => setActiveTab('groups')}
+              >
+                <Text style={[styles.tabText, activeTab === 'groups' && styles.tabTextActive]}>
+                  Groups
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tab, activeTab === 'playoffs' && styles.tabActive]}
+                onPress={() => setActiveTab('playoffs')}
+              >
+                <Text style={[styles.tabText, activeTab === 'playoffs' && styles.tabTextActive]}>
+                  Playoffs
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tab, activeTab === 'matches' && styles.tabActive]}
+                onPress={() => setActiveTab('matches')}
+              >
+                <Text style={[styles.tabText, activeTab === 'matches' && styles.tabTextActive]}>
+                  Matches
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </ScrollView>
       )}
 
       {activeTab === 'overview' && renderOverviewTab()}
+      {activeTab === 'rounds' && renderRoundsTab()}
+      {activeTab === 'leaderboard' && renderLeaderboardTab()}
+      {activeTab === 'players' && renderPlayersTab()}
       {activeTab === 'groups' && renderGroupsTab()}
       {activeTab === 'playoffs' && renderPlayoffsTab()}
       {activeTab === 'matches' && renderMatchesTab()}
@@ -619,14 +892,13 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   tabs: {
-    flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   tab: {
-    flex: 1,
     paddingVertical: Spacing.md,
-    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    marginHorizontal: Spacing.xs,
   },
   tabActive: {
     borderBottomWidth: 2,
@@ -791,6 +1063,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  roundSection: {
+    gap: Spacing.md,
+  },
+  roundTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+  },
   groupSelector: {
     flexDirection: 'row',
     gap: Spacing.sm,
@@ -840,7 +1120,7 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.bold,
     color: Colors.textMuted,
     textAlign: 'center',
-    width: 40,
+    width: 50,
   },
   standingsRow: {
     flexDirection: 'row',
@@ -849,9 +1129,9 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   standingsRank: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: Colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
@@ -870,7 +1150,7 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.medium,
     color: Colors.textPrimary,
     textAlign: 'center',
-    width: 40,
+    width: 50,
   },
   matchesCard: {
     gap: Spacing.md,
@@ -946,5 +1226,54 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.sm,
     color: Colors.success,
     fontWeight: Typography.weights.medium,
+  },
+  ratingSummaryCard: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    borderColor: Colors.accentGold,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  ratingSummaryHeader: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  ratingSummaryTitle: {
+    fontSize: Typography.sizes.xl,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+  },
+  ratingSummarySubtitle: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
+  },
+  ratingDeltasList: {
+    gap: Spacing.sm,
+  },
+  ratingDeltaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+  },
+  ratingDeltaRank: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
+    color: Colors.accentGold,
+    width: 32,
+  },
+  ratingDeltaName: {
+    flex: 1,
+    fontSize: Typography.sizes.base,
+    color: Colors.textPrimary,
+  },
+  ratingDeltaValue: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
   },
 });

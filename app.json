@@ -26,6 +26,14 @@
     "plugins": [
       "expo-router",
       [
+        "react-native-google-mobile-ads",
+        {
+          "iosAppId": "ca-app-pub-4447766624305417~2257432285",
+          "androidAppId": "ca-app-pub-4447766624305417~1762608263",
+          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/logo.png",

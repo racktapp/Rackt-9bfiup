@@ -1,8 +1,14 @@
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AlertProvider } from '@/template';
+import { initAdMob } from '@/utils/admob';
 
 export default function RootLayout() {
+  useEffect(() => {
+    initAdMob();
+  }, []);
+
   return (
     <AlertProvider>
       <SafeAreaProvider>

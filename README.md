@@ -73,3 +73,7 @@ This project is private ("private": true). For collaboration inquiries, please c
 ---
 
 Feel free to add project screenshots, API documentation, feature descriptions, or any other information as needed.
+
+## AdMob Build Note
+
+AdMob (via `react-native-google-mobile-ads`) requires a native rebuild after configuration changes. Use a fresh Android/iOS build (APK/AAB/IPA) or EAS build to validate ads; ads will not work in Expo Go or preview clients.

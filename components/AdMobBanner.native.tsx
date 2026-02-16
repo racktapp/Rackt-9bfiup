@@ -1,45 +1,62 @@
+import React, { useMemo } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
+import { logStartup } from '@/utils/startupDiagnostics';
 
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { AdMobBanner, AdMobInterstitial, AdMobRewarded } from 'react-native-admob';
+const PROD_BANNER_IDS: Record<'ios' | 'android', string> = {
+  ios: 'ca-app-pub-xxxxxxxxxxxxxxxx/xxxxxxxxxx',
+  android: 'ca-app-pub-xxxxxxxxxxxxxxxx/xxxxxxxxxx',
+};
 
-interface AdMobBannerProps {
-  bannerSize: string;
-  adUnitID: string;
-  testDevices?: string[];
-  onAdFailedToLoad?: (error: any) => void;
-  onAdLoaded?: () => void;
-  onSizeChange?: () => void;
-}
+export function AdMobBanner() {
+  const adComponents = useMemo(() => {
+    if (Platform.OS === 'web') {
+      return null;
+    }
 
-const AdMobBannerComponent: React.FC<AdMobBannerProps> = ({
-  bannerSize,
-  adUnitID,
-  testDevices,
-  onAdFailedToLoad,
-  onAdLoaded,
-  onSizeChange,
-}) => {
+    try {
+      const module = require('react-native-google-mobile-ads');
+      return {
+        BannerAd: module.BannerAd as React.ComponentType<any>,
+        BannerAdSize: module.BannerAdSize,
+        TestIds: module.TestIds,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown module load error';
+      logStartup(`[AdMobBanner] native ads unavailable, rendering placeholder: ${message}`);
+      return null;
+    }
+  }, []);
+
+  if (!adComponents?.BannerAd) {
+    return <View style={styles.placeholder} />;
+  }
+
+  const unitId = __DEV__
+    ? adComponents.TestIds?.BANNER
+    : PROD_BANNER_IDS[Platform.OS as 'ios' | 'android'];
+
+  if (!unitId) {
+    return <View style={styles.placeholder} />;
+  }
+
+  const BannerAd = adComponents.BannerAd;
+  const bannerSize = adComponents.BannerAdSize?.ANCHORED_ADAPTIVE_BANNER ?? 'BANNER';
+
   return (
     <View style={styles.bannerContainer}>
-      <AdMobBanner
-        bannerSize={bannerSize}
-        adUnitID={adUnitID}
-        testDevices={testDevices}
-        onAdFailedToLoad={onAdFailedToLoad}
-        onAdLoaded={onAdLoaded}
-        onSizeChange={onSizeChange}
-      />
+      <BannerAd unitId={unitId} size={bannerSize} />
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   bannerContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 10,
+    minHeight: 50,
+  },
+  placeholder: {
+    minHeight: 1,
   },
 });
-
-export default AdMobBannerComponent;

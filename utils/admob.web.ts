@@ -1,5 +1,4 @@
-// Web platform does not support AdMob
-// This is a no-op implementation for web compatibility
+import { logStartup } from '@/utils/startupDiagnostics';
 
 let hasInitialized = false;
 
@@ -8,7 +7,6 @@ export async function initAdMob(): Promise<void> {
     return;
   }
 
-  // No-op for web platform
-  console.log('[AdMob] Not available on web platform');
+  logStartup('[AdMob] skipped on web platform');
   hasInitialized = true;
 }

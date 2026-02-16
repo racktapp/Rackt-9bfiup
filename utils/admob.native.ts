@@ -1,31 +1,27 @@
-
-import { AdEventType, TestIds, RewardedAd, RewardedAdLoadError } from '@react-native-firebase/admob';
 import { Platform } from 'react-native';
+import { logStartup, logStartupError } from '@/utils/startupDiagnostics';
 
-const ADMOB_UNIT_ID_REWARDED = Platform.select({
-  ios: __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxxxxxxxxx', // Replace with your iOS rewarded ad unit ID
-  android: __DEV__ ? TestIds.REWARDED : 'ca-app-pub-xxxxxxxxxxxxxxxx', // Replace with your Android rewarded ad unit ID
-}) as string;
+let hasInitialized = false;
 
-export const createAndLoadRewardedAd = (onAdLoaded: () => void, onAdFailedToLoad: (error: RewardedAdLoadError) => void, onAdRewarded: (reward: any) => void) => {
-  const rewardedAd = RewardedAd.createForAdRequest(ADMOB_UNIT_ID_REWARDED);
+export async function initAdMob(): Promise<void> {
+  if (hasInitialized || Platform.OS === 'web') {
+    return;
+  }
 
-  rewardedAd.onAdEvent((type, error, reward) => {
-    if (type === AdEventType.LOADED) {
-      onAdLoaded();
+  try {
+    const admobModule = require('react-native-google-mobile-ads');
+    const mobileAds = admobModule?.default;
+
+    if (typeof mobileAds === 'function') {
+      await mobileAds().initialize();
+      logStartup('[AdMob] initialized');
+    } else {
+      logStartup('[AdMob] module found but initialize unavailable; skipping');
     }
-    if (type === AdEventType.EARNED_REWARD) {
-      if (reward) {
-        onAdRewarded(reward);
-      }
-    }
-    if (type === AdEventType.FAILED_TO_LOAD) {
-      if (error) {
-        onAdFailedToLoad(error);
-      }
-    }
-  });
-
-  rewardedAd.load();
-  return rewardedAd;
-};
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown AdMob load error';
+    logStartupError(`[AdMob] unavailable in host app, skipping ads: ${message}`);
+  } finally {
+    hasInitialized = true;
+  }
+}

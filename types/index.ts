@@ -141,7 +141,7 @@ export interface Tournament {
   format?: 'groups_playoffs';
   mode: 'singles' | 'doubles';
   isCompetitive: boolean;
-  state: 'draft' | 'inviting' | 'locked' | 'in_progress' | 'completed';
+  state: 'draft' | 'inviting' | 'locked' | 'in_progress' | 'completed' | 'deleted';
   groupId: string | null;
   participants: TournamentParticipant[];
   settings: {
@@ -162,7 +162,7 @@ export interface TournamentInvite {
   tournamentId: string;
   invitedUserId: string;
   invitedByUserId: string;
-  status: 'pending' | 'accepted' | 'declined';
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
   createdAt: string;
   invitedUser?: User;
   invitedByUser?: User;

@@ -69,11 +69,29 @@ export default function TournamentsHomeScreen() {
   const handleRespondToInvite = async (inviteId: string, accept: boolean) => {
     setRespondingToInvite(inviteId);
     try {
-      await tournamentsService.respondToInvite(inviteId, accept);
+      const result = await tournamentsService.respondToInvite(inviteId, accept);
+      
+      // Reload tournaments to update the list
       await loadTournaments();
+      
+      if (accept && result.tournamentId) {
+        // Navigate to tournament detail after successful acceptance
+        // Small delay to ensure database propagation
+        setTimeout(() => {
+          router.push(`/tournaments/${result.tournamentId}`);
+        }, 300);
+      }
     } catch (err: any) {
       console.error('Error responding to invite:', err);
-      setError(err.message || 'Failed to respond to invite');
+      // Show specific error message from service
+      const message = err.message || 'Failed to respond to invite';
+      setError(message);
+      
+      // Also show alert for better UX
+      if (message.includes('no longer exists') || message.includes('already completed')) {
+        // Remove the stale invite from UI
+        await loadTournaments();
+      }
     } finally {
       setRespondingToInvite(null);
     }

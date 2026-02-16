@@ -83,6 +83,7 @@ export const tournamentsService = {
       .from('tournaments')
       .select('*')
       .or(`created_by_user_id.eq.${userId},participants.cs.[{"userId":"${userId}"}]`)
+      .neq('state', 'deleted')  // Filter out deleted tournaments
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -179,45 +180,66 @@ export const tournamentsService = {
     }));
   },
 
-  async respondToInvite(inviteId: string, accept: boolean): Promise<void> {
+  async respondToInvite(inviteId: string, accept: boolean): Promise<{ tournamentId?: string }> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    console.log(`[respondToInvite] inviteId=${inviteId}, userId=${user.id}, accept=${accept}`);
+
+    // First, get invite details to validate
+    const { data: invite, error: inviteReadError } = await supabase
+      .from('tournament_invites')
+      .select('id, tournament_id, invited_user_id, status')
+      .eq('id', inviteId)
+      .single();
+
+    if (inviteReadError || !invite) {
+      console.error('[respondToInvite] Invite not found:', inviteReadError);
+      throw new Error('Invite not found or has been deleted');
+    }
+
+    if (invite.invited_user_id !== user.id) {
+      console.error('[respondToInvite] Permission denied - invite not addressed to current user');
+      throw new Error('You are not authorized to respond to this invite');
+    }
+
+    if (invite.status !== 'pending') {
+      console.error(`[respondToInvite] Invite already ${invite.status}`);
+      throw new Error(`This invite has already been ${invite.status}`);
+    }
+
+    // Verify tournament still exists
+    const { data: tournamentCheck, error: tournamentCheckError } = await supabase
+      .from('tournaments')
+      .select('id, state, participants')
+      .eq('id', invite.tournament_id)
+      .single();
+
+    if (tournamentCheckError || !tournamentCheck) {
+      console.error('[respondToInvite] Tournament not found:', tournamentCheckError);
+      
+      // Mark invite as expired
+      await supabase
+        .from('tournament_invites')
+        .update({ status: 'expired' })
+        .eq('id', inviteId);
+      
+      throw new Error('This tournament no longer exists');
+    }
+
+    if (tournamentCheck.state === 'completed') {
+      throw new Error('This tournament has already completed');
+    }
+
     const newStatus = accept ? 'accepted' : 'declined';
 
-    const { error: updateError } = await supabase
-      .from('tournament_invites')
-      .update({ status: newStatus })
-      .eq('id', inviteId)
-      .eq('invited_user_id', user.id);
-
-    if (updateError) throw updateError;
-
     if (accept) {
-      // Get invite details
-      const { data: invite } = await supabase
-        .from('tournament_invites')
-        .select('tournament_id')
-        .eq('id', inviteId)
-        .single();
-
-      if (!invite) throw new Error('Invite not found');
-
       // Get user profile
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('id, username, display_name, avatar_url')
         .eq('id', user.id)
         .single();
-
-      // Get current tournament
-      const { data: tournament } = await supabase
-        .from('tournaments')
-        .select('participants')
-        .eq('id', invite.tournament_id)
-        .single();
-
-      if (!tournament) throw new Error('Tournament not found');
 
       const newParticipant: TournamentParticipant = {
         userId: user.id,
@@ -228,9 +250,31 @@ export const tournamentsService = {
         seed: null,
       };
 
-      const updatedParticipants = [...(tournament.participants || []), newParticipant];
+      // Check if user already in participants
+      const alreadyParticipant = tournamentCheck.participants?.some(
+        (p: TournamentParticipant) => p.userId === user.id
+      );
 
-      // Update tournament with new participant
+      if (alreadyParticipant) {
+        console.log('[respondToInvite] User already a participant, just updating invite status');
+        
+        // Just update invite status
+        const { error: updateError } = await supabase
+          .from('tournament_invites')
+          .update({ status: newStatus })
+          .eq('id', inviteId);
+
+        if (updateError) throw updateError;
+        
+        return { tournamentId: invite.tournament_id };
+      }
+
+      const updatedParticipants = [...(tournamentCheck.participants || []), newParticipant];
+
+      console.log('[respondToInvite] Adding user to tournament participants');
+
+      // ATOMIC UPDATE: Update both invite and tournament in sequence
+      // First update tournament to add participant
       const { error: tournamentError } = await supabase
         .from('tournaments')
         .update({ 
@@ -239,7 +283,35 @@ export const tournamentsService = {
         })
         .eq('id', invite.tournament_id);
 
-      if (tournamentError) throw tournamentError;
+      if (tournamentError) {
+        console.error('[respondToInvite] Failed to add participant:', tournamentError);
+        throw new Error('Failed to join tournament. Please try again.');
+      }
+
+      // Then update invite status
+      const { error: updateError } = await supabase
+        .from('tournament_invites')
+        .update({ status: newStatus })
+        .eq('id', inviteId);
+
+      if (updateError) {
+        console.error('[respondToInvite] Failed to update invite status:', updateError);
+        // Non-critical error - user is already added to tournament
+      }
+
+      console.log('[respondToInvite] Successfully joined tournament');
+      
+      return { tournamentId: invite.tournament_id };
+    } else {
+      // Declining invite - just update status
+      const { error: updateError } = await supabase
+        .from('tournament_invites')
+        .update({ status: newStatus })
+        .eq('id', inviteId);
+
+      if (updateError) throw updateError;
+      
+      return {};
     }
   },
 
@@ -272,6 +344,56 @@ export const tournamentsService = {
     }
 
     return { valid: true, message: '' };
+  },
+
+  async deleteTournament(tournamentId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    console.log(`[deleteTournament] tournamentId=${tournamentId}, userId=${user.id}`);
+
+    // Verify user is creator
+    const { data: tournament, error: fetchError } = await supabase
+      .from('tournaments')
+      .select('created_by_user_id, state, title')
+      .eq('id', tournamentId)
+      .single();
+
+    if (fetchError || !tournament) {
+      console.error('[deleteTournament] Tournament not found:', fetchError);
+      throw new Error('Tournament not found');
+    }
+
+    if (tournament.created_by_user_id !== user.id) {
+      console.error('[deleteTournament] Permission denied - user is not creator');
+      throw new Error('Only the tournament creator can delete this tournament');
+    }
+
+    console.log(`[deleteTournament] Deleting tournament: ${tournament.title}`);
+
+    // Soft delete: mark as deleted instead of removing
+    // This preserves data integrity and allows recovery if needed
+    const { error: deleteError } = await supabase
+      .from('tournaments')
+      .update({ 
+        state: 'deleted' as any,  // Add 'deleted' state
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', tournamentId);
+
+    if (deleteError) {
+      console.error('[deleteTournament] Failed to delete tournament:', deleteError);
+      throw new Error('Failed to delete tournament. Please try again.');
+    }
+
+    // Also mark all related invites as expired
+    await supabase
+      .from('tournament_invites')
+      .update({ status: 'expired' })
+      .eq('tournament_id', tournamentId)
+      .eq('status', 'pending');
+
+    console.log('[deleteTournament] Tournament deleted successfully');
   },
 
   mapTournament(raw: any): Tournament {

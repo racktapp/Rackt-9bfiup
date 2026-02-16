@@ -33,6 +33,8 @@ export default function TournamentDetailScreen() {
   const [americanoLeaderboard, setAmericanoLeaderboard] = useState<AmericanoLeaderboardEntry[]>([]);
   const [completingTournament, setCompletingTournament] = useState(false);
   const [ratingDeltas, setRatingDeltas] = useState<Array<{ userId: string; displayName: string; delta: number }> | null>(null);
+  const [deletingTournament, setDeletingTournament] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -191,6 +193,27 @@ export default function TournamentDetailScreen() {
       showAlert('Error', err.message || 'Failed to complete tournament');
     } finally {
       setCompletingTournament(false);
+    }
+  };
+
+  const handleDeleteTournament = async () => {
+    if (!tournament) return;
+
+    setShowDeleteConfirm(false);
+    setDeletingTournament(true);
+    
+    try {
+      await tournamentsService.deleteTournament(tournament.id);
+      showAlert('Tournament Deleted', 'This tournament has been permanently deleted.');
+      
+      // Navigate back after short delay
+      setTimeout(() => {
+        router.back();
+      }, 1000);
+    } catch (err: any) {
+      console.error('Error deleting tournament:', err);
+      showAlert('Error', err.message || 'Failed to delete tournament');
+      setDeletingTournament(false);
     }
   };
 
@@ -784,7 +807,13 @@ export default function TournamentDetailScreen() {
           <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Tournament</Text>
-        <View style={{ width: 24 }} />
+        {userId === tournament.createdByUserId && tournament.state !== 'completed' && tournament.state !== 'in_progress' ? (
+          <Pressable onPress={() => setShowDeleteConfirm(true)} disabled={deletingTournament}>
+            <MaterialIcons name="delete" size={24} color={deletingTournament ? Colors.textMuted : Colors.danger} />
+          </Pressable>
+        ) : (
+          <View style={{ width: 24 }} />
+        )}
       </View>
 
       {showTabs && (
@@ -868,6 +897,33 @@ export default function TournamentDetailScreen() {
       {activeTab === 'groups' && renderGroupsTab()}
       {activeTab === 'playoffs' && renderPlayoffsTab()}
       {activeTab === 'matches' && renderMatchesTab()}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <MaterialIcons name="warning" size={48} color={Colors.danger} />
+            <Text style={styles.modalTitle}>Delete Tournament?</Text>
+            <Text style={styles.modalMessage}>
+              This action cannot be undone. All matches, invites, and tournament data will be permanently deleted.
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowDeleteConfirm(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonDelete]}
+                onPress={handleDeleteTournament}
+              >
+                <Text style={styles.modalButtonTextDelete}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1275,5 +1331,68 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.lg,
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+    gap: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  modalTitle: {
+    fontSize: Typography.sizes.xl,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+  },
+  modalMessage: {
+    fontSize: Typography.sizes.base,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    width: '100%',
+    marginTop: Spacing.sm,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  modalButtonDelete: {
+    backgroundColor: Colors.danger,
+  },
+  modalButtonTextCancel: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  modalButtonTextDelete: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: '#FFFFFF',
   },
 });

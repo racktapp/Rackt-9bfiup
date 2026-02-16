@@ -11,6 +11,7 @@ import { userService } from '@/services/user';
 import { tournamentsService } from '@/services/tournaments';
 import { Tournament } from '@/types';
 import { normalizeMatchSets, calculateSetsWon } from '@/services/matchUtils';
+import TournamentsHome from '../tournaments/index';
 
 const supabase = getSupabaseClient();
 
@@ -22,9 +23,6 @@ export default function DashboardScreen() {
 
   const [userId, setUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-
-  // Import tournaments component
-  const TournamentsHome = require('../tournaments/index').default;
   const [events, setEvents] = useState<any[]>([]);
   const [pendingMatches, setPendingMatches] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);

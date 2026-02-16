@@ -240,13 +240,13 @@ export default function SettingsScreen() {
             icon="bug-report"
             title="Report a Bug"
             subtitle="Help us improve Rackt"
-            onPress={() => Linking.openURL('mailto:support@rackt.app?subject=Bug Report')}
+            onPress={() => Linking.openURL('mailto:racktapp@gmail.com?subject=Bug Report')}
           />
           <SettingsRow
             icon="email"
             title="Contact Support"
             subtitle="Get help with your account"
-            onPress={() => Linking.openURL('mailto:support@rackt.app?subject=Support Request')}
+            onPress={() => Linking.openURL('mailto:racktapp@gmail.com?subject=Support Request')}
           />
           <SettingsRow
             icon="help-outline"

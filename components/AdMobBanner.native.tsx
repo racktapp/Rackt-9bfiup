@@ -14,7 +14,8 @@ export function AdMobBanner() {
     }
 
     try {
-      const module = require('react-native-google-mobile-ads');
+      // Use string concatenation to prevent Metro's static analysis from resolving this on web
+      const module = require('react-native-google-mobile-' + 'ads');
       return {
         BannerAd: module.BannerAd as React.ComponentType<any>,
         BannerAdSize: module.BannerAdSize,

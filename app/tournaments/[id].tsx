@@ -199,20 +199,35 @@ export default function TournamentDetailScreen() {
   const handleDeleteTournament = async () => {
     if (!tournament) return;
 
+    console.log(`[TournamentDelete] User confirmed deletion - tournamentId=${tournament.id}, userId=${userId}`);
+    
     setShowDeleteConfirm(false);
     setDeletingTournament(true);
     
     try {
+      console.log('[TournamentDelete] Calling deleteTournament service...');
       await tournamentsService.deleteTournament(tournament.id);
+      console.log('[TournamentDelete] Service call successful');
+      
       showAlert('Tournament Deleted', 'This tournament has been permanently deleted.');
       
       // Navigate back after short delay
+      console.log('[TournamentDelete] Navigating back...');
       setTimeout(() => {
         router.back();
       }, 1000);
     } catch (err: any) {
-      console.error('Error deleting tournament:', err);
-      showAlert('Error', err.message || 'Failed to delete tournament');
+      // INSTRUMENTATION: Log full error details
+      console.error('[TournamentDelete] ERROR:', {
+        message: err.message,
+        stack: err.stack,
+        tournamentId: tournament.id,
+        userId,
+      });
+      
+      // Show specific error message
+      const errorMessage = err.message || 'Failed to delete tournament';
+      showAlert('Error', errorMessage);
       setDeletingTournament(false);
     }
   };

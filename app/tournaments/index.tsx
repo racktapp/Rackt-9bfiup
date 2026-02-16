@@ -5,7 +5,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
-import { Button, ScreenLoader, EmptyState, ErrorState, UserAvatar, UserName } from '@/components';
+import { Button, ScreenLoader, EmptyState, ErrorState, UserAvatar, UserName, LoadingSpinner } from '@/components';
+import { useAlert } from '@/template';
 import { tournamentsService } from '@/services/tournaments';
 import { Tournament, TournamentInvite } from '@/types';
 import { getSupabaseClient } from '@/template';
@@ -15,6 +16,7 @@ const supabase = getSupabaseClient();
 export default function TournamentsHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { showAlert } = useAlert();
 
   const [userId, setUserId] = useState<string | null>(null);
   const [activeTournaments, setActiveTournaments] = useState<Tournament[]>([]);
@@ -67,33 +69,58 @@ export default function TournamentsHomeScreen() {
   }, [userId]);
 
   const handleRespondToInvite = async (inviteId: string, accept: boolean) => {
+    // INSTRUMENTATION: Log the action
+    console.log(`[TournamentInvite] User action: ${accept ? 'Accept' : 'Decline'}, inviteId=${inviteId}, userId=${userId}`);
+    
     setRespondingToInvite(inviteId);
+    
     try {
+      // INSTRUMENTATION: Call service with logging
+      console.log('[TournamentInvite] Calling respondToInvite service...');
       const result = await tournamentsService.respondToInvite(inviteId, accept);
+      console.log('[TournamentInvite] Service call successful:', result);
       
       // Reload tournaments to update the list
+      console.log('[TournamentInvite] Reloading tournaments...');
       await loadTournaments();
       
       if (accept && result.tournamentId) {
+        // Show success message
+        showAlert('Success', 'You have joined the tournament!');
+        
         // Navigate to tournament detail after successful acceptance
-        // Small delay to ensure database propagation
+        // Increased delay to ensure database propagation
+        console.log('[TournamentInvite] Navigating to tournament detail...');
         setTimeout(() => {
           router.push(`/tournaments/${result.tournamentId}`);
-        }, 300);
+        }, 500);
+      } else if (!accept) {
+        showAlert('Invite Declined', 'You have declined the tournament invitation.');
       }
     } catch (err: any) {
-      console.error('Error responding to invite:', err);
+      // INSTRUMENTATION: Log full error details
+      console.error('[TournamentInvite] ERROR:', {
+        message: err.message,
+        stack: err.stack,
+        inviteId,
+        userId,
+        accept,
+      });
+      
       // Show specific error message from service
       const message = err.message || 'Failed to respond to invite';
-      setError(message);
       
-      // Also show alert for better UX
-      if (message.includes('no longer exists') || message.includes('already completed')) {
-        // Remove the stale invite from UI
+      // Show alert with specific error
+      showAlert('Error', message);
+      
+      // If tournament no longer exists, refresh to remove stale invite
+      if (message.includes('no longer exists') || message.includes('already completed') || message.includes('deleted')) {
+        console.log('[TournamentInvite] Stale invite detected, refreshing list...');
         await loadTournaments();
       }
     } finally {
       setRespondingToInvite(null);
+      console.log('[TournamentInvite] Handler complete');
     }
   };
 
@@ -163,18 +190,26 @@ export default function TournamentsHomeScreen() {
 
       <View style={styles.inviteActions}>
         <Pressable
-          style={[styles.inviteButton, styles.inviteButtonDecline]}
+          style={[styles.inviteButton, styles.inviteButtonDecline, respondingToInvite !== null && styles.inviteButtonDisabled]}
           onPress={() => handleRespondToInvite(invite.id, false)}
           disabled={respondingToInvite !== null}
         >
-          <Text style={styles.inviteButtonTextDecline}>Decline</Text>
+          {respondingToInvite === invite.id ? (
+            <LoadingSpinner size={16} color={Colors.textMuted} />
+          ) : (
+            <Text style={styles.inviteButtonTextDecline}>Decline</Text>
+          )}
         </Pressable>
         <Pressable
-          style={[styles.inviteButton, styles.inviteButtonAccept]}
+          style={[styles.inviteButton, styles.inviteButtonAccept, respondingToInvite !== null && styles.inviteButtonDisabled]}
           onPress={() => handleRespondToInvite(invite.id, true)}
           disabled={respondingToInvite !== null}
         >
-          <Text style={styles.inviteButtonTextAccept}>Accept</Text>
+          {respondingToInvite === invite.id ? (
+            <LoadingSpinner size={16} color={Colors.textPrimary} />
+          ) : (
+            <Text style={styles.inviteButtonTextAccept}>Accept</Text>
+          )}
         </Pressable>
       </View>
     </View>
@@ -420,6 +455,9 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.semibold,
     color: Colors.textMuted,
+  },
+  inviteButtonDisabled: {
+    opacity: 0.5,
   },
   tournamentsList: {
     gap: Spacing.md,

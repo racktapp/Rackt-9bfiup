@@ -89,11 +89,11 @@ export default function TournamentsHomeScreen() {
         showAlert('Success', 'You have joined the tournament!');
         
         // Navigate to tournament detail after successful acceptance
-        // Increased delay to ensure database propagation
+        // Increased delay to 800ms to ensure RLS propagation
         console.log('[TournamentInvite] Navigating to tournament detail...');
         setTimeout(() => {
           router.push(`/tournaments/${result.tournamentId}`);
-        }, 500);
+        }, 800);
       } else if (!accept) {
         showAlert('Invite Declined', 'You have declined the tournament invitation.');
       }

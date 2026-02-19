@@ -67,14 +67,43 @@ export const tournamentsService = {
     return this.mapTournament(tournament);
   },
 
-  async getTournamentById(tournamentId: string): Promise<Tournament> {
+  async getTournamentById(tournamentId: string, retries: number = 3): Promise<Tournament> {
+    console.log(`[getTournamentById] Fetching tournament: ${tournamentId}, retries left: ${retries}`);
+    
     const { data, error } = await supabase
       .from('tournaments')
       .select('*')
       .eq('id', tournamentId)
+      .is('deleted_at', null)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('[getTournamentById] ERROR:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        tournamentId,
+      });
+      
+      // If no rows returned and we have retries left, wait and retry
+      // This handles RLS propagation delays after accepting invites
+      if (error.code === 'PGRST116' && retries > 0) {
+        console.log(`[getTournamentById] No rows returned, retrying in 300ms... (${retries} retries left)`);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        return this.getTournamentById(tournamentId, retries - 1);
+      }
+      
+      throw error;
+    }
+    
+    console.log('[getTournamentById] SUCCESS:', {
+      id: data.id,
+      title: data.title,
+      state: data.state,
+      participantCount: data.participants?.length || 0,
+    });
+    
     return this.mapTournament(data);
   },
 

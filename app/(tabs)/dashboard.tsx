@@ -15,7 +15,7 @@ import TournamentsHome from '../tournaments/index';
 
 const supabase = getSupabaseClient();
 
-type TabType = 'feed' | 'overview' | 'tournaments';
+type TabType = 'overview' | 'tournaments';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -23,6 +23,7 @@ export default function DashboardScreen() {
 
   const [userId, setUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [unreadFeedCount, setUnreadFeedCount] = useState<number>(0);
   const [events, setEvents] = useState<any[]>([]);
   const [pendingMatches, setPendingMatches] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -53,10 +54,11 @@ export default function DashboardScreen() {
   const loadInitialData = async () => {
     try {
       setError(null);
-      if (activeTab === 'feed') {
-        await Promise.all([loadFeed(), loadPendingMatches()]);
-      } else {
-        await loadOverviewData();
+      await loadOverviewData();
+      // Load unread count for bell badge
+      if (userId) {
+        const pending = await loadPendingMatchesCount();
+        setUnreadFeedCount(pending);
       }
     } catch (err: any) {
       console.error('Error loading dashboard:', err);
@@ -76,44 +78,28 @@ export default function DashboardScreen() {
     }
   };
 
-  const loadPendingMatches = async () => {
-    if (!userId) return;
+  const loadPendingMatchesCount = async (): Promise<number> => {
+    if (!userId) return 0;
     try {
       const { data: matchPlayers } = await supabase
         .from('match_players')
         .select(`
           match:match_id (
             id,
-            sport,
-            format,
-            type,
             status,
-            created_by,
-            group:group_id (id, name),
-            players:match_players(
-              id,
-              team,
-              user:user_id (id, username, display_name)
-            ),
-            sets:match_sets(
-              set_number,
-              team_a_score,
-              team_b_score
-            )
+            created_by
           )
         `)
         .eq('user_id', userId);
 
       const pending = (matchPlayers || [])
         .map((mp: any) => mp.match)
-        .filter((m: any) => m && m.status === 'pending' && m.created_by !== userId)
-        .sort((a: any, b: any) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        .filter((m: any) => m && m.status === 'pending' && m.created_by !== userId);
 
-      setPendingMatches(pending);
+      return pending.length;
     } catch (err) {
-      console.error('Error loading pending matches:', err);
+      console.error('Error loading pending matches count:', err);
+      return 0;
     }
   };
 
@@ -679,14 +665,6 @@ export default function DashboardScreen() {
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.tab, activeTab === 'feed' && styles.tabActive]}
-            onPress={() => setActiveTab('feed')}
-          >
-            <Text style={[styles.tabText, activeTab === 'feed' && styles.tabTextActive]}>
-              Feed
-            </Text>
-          </Pressable>
-          <Pressable
             style={[styles.tab, activeTab === 'tournaments' && styles.tabActive]}
             onPress={() => setActiveTab('tournaments')}
           >
@@ -727,14 +705,6 @@ export default function DashboardScreen() {
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.tab, activeTab === 'feed' && styles.tabActive]}
-            onPress={() => setActiveTab('feed')}
-          >
-            <Text style={[styles.tabText, activeTab === 'feed' && styles.tabTextActive]}>
-              Feed
-            </Text>
-          </Pressable>
-          <Pressable
             style={[styles.tab, activeTab === 'tournaments' && styles.tabActive]}
             onPress={() => setActiveTab('tournaments')}
           >
@@ -763,9 +733,23 @@ export default function DashboardScreen() {
           />
         </Pressable>
         <Text style={styles.headerTitle}>Dashboard</Text>
-        <Pressable onPress={() => router.push('/settings')}>
-          <MaterialIcons name="settings" size={24} color={Colors.textPrimary} />
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
+          <Pressable onPress={() => router.push('/(tabs)/feed')}>
+            <View>
+              <MaterialIcons name="notifications" size={24} color={Colors.textPrimary} />
+              {unreadFeedCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadFeedCount > 9 ? '9+' : unreadFeedCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </Pressable>
+          <Pressable onPress={() => router.push('/settings')}>
+            <MaterialIcons name="settings" size={24} color={Colors.textPrimary} />
+          </Pressable>
+        </View>
       </View>
 
       {/* Tabs */}
@@ -779,14 +763,6 @@ export default function DashboardScreen() {
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.tab, activeTab === 'feed' && styles.tabActive]}
-          onPress={() => setActiveTab('feed')}
-        >
-          <Text style={[styles.tabText, activeTab === 'feed' && styles.tabTextActive]}>
-            Feed
-          </Text>
-        </Pressable>
-        <Pressable
           style={[styles.tab, activeTab === 'tournaments' && styles.tabActive]}
           onPress={() => setActiveTab('tournaments')}
         >
@@ -796,7 +772,7 @@ export default function DashboardScreen() {
         </Pressable>
       </View>
 
-      {activeTab === 'overview' ? renderOverviewTab() : activeTab === 'feed' ? renderFeedTab() : <TournamentsHome />}
+      {activeTab === 'overview' ? renderOverviewTab() : <TournamentsHome />}
     </View>
   );
 }
@@ -1256,5 +1232,22 @@ const styles = StyleSheet.create({
   completedTournamentDelta: {
     fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: Colors.danger,
+    borderRadius: BorderRadius.full,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
   },
 });

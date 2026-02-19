@@ -157,7 +157,11 @@ export default function FeedScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Feed</Text>
+          <Pressable onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Activity Feed</Text>
+          <View style={{ width: 24 }} />
         </View>
         <ScreenLoader message="Loading activity..." />
       </View>
@@ -168,7 +172,11 @@ export default function FeedScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Feed</Text>
+          <Pressable onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Activity Feed</Text>
+          <View style={{ width: 24 }} />
         </View>
         <ErrorState message={error} onRetry={loadInitialData} />
       </View>
@@ -178,7 +186,11 @@ export default function FeedScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Feed</Text>
+        <Pressable onPress={() => router.back()}>
+          <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
+        </Pressable>
+        <Text style={styles.headerTitle}>Activity Feed</Text>
+        <View style={{ width: 24 }} />
       </View>
 
       <ScrollView
@@ -284,13 +296,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   headerTitle: {
-    fontSize: Typography.sizes.xxl,
+    fontSize: Typography.sizes.xl,
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },

@@ -83,7 +83,7 @@ export const tournamentsService = {
       .from('tournaments')
       .select('*')
       .or(`created_by_user_id.eq.${userId},participants.cs.[{"userId":"${userId}"}]`)
-      .neq('state', 'deleted')  // Filter out deleted tournaments
+      .is('deleted_at', null)  // Filter out soft-deleted tournaments
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -223,7 +223,7 @@ export const tournamentsService = {
     console.log('[respondToInvite] STEP 3: Fetching tournament...');
     const { data: tournamentCheck, error: tournamentCheckError } = await supabase
       .from('tournaments')
-      .select('id, state, participants, created_by_user_id, title')
+      .select('id, state, participants, created_by_user_id, title, deleted_at')
       .eq('id', invite.tournament_id)
       .single();
 
@@ -251,11 +251,12 @@ export const tournamentsService = {
       state: tournamentCheck.state,
       participantCount: tournamentCheck.participants?.length || 0,
       creatorId: tournamentCheck.created_by_user_id,
+      deletedAt: tournamentCheck.deleted_at,
     });
 
-    // Check if tournament is deleted
-    if (tournamentCheck.state === 'deleted') {
-      console.error('[respondToInvite] ERROR - Tournament deleted');
+    // Check if tournament is soft-deleted
+    if (tournamentCheck.deleted_at) {
+      console.error('[respondToInvite] ERROR - Tournament deleted at:', tournamentCheck.deleted_at);
       
       // Mark invite as expired
       await supabase
@@ -455,12 +456,12 @@ export const tournamentsService = {
 
     console.log(`[deleteTournament] STEP 2: Soft-deleting tournament: ${tournament.title}`);
 
-    // Soft delete: mark as deleted instead of removing
+    // Soft delete: set deleted_at timestamp instead of changing state
     // This preserves data integrity and allows recovery if needed
     const { error: deleteError } = await supabase
       .from('tournaments')
       .update({ 
-        state: 'deleted' as any,  // Add 'deleted' state
+        deleted_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq('id', tournamentId);
@@ -476,7 +477,7 @@ export const tournamentsService = {
       throw new Error(`Failed to delete tournament: ${deleteError.message || 'Unknown error'}`);
     }
 
-    console.log('[deleteTournament] SUCCESS - Tournament state updated to deleted');
+    console.log('[deleteTournament] SUCCESS - Tournament soft-deleted (deleted_at set)');
 
     // STEP 3: Mark all related invites as expired
     console.log('[deleteTournament] STEP 3: Expiring pending invites...');

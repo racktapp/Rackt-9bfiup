@@ -393,27 +393,14 @@ export const tournamentsService = {
 
       console.log('[acceptInvite] SUCCESS - Participant write complete');
 
-      // STEP 7: Update invite status
-      console.log('[acceptInvite] STEP 7: Updating invite status...');
-      const { error: updateError } = await supabase
-        .from('tournament_invites')
-        .update({ status: newStatus })
-        .eq('id', inviteId);
-
-      if (updateError) {
-        console.error('[acceptInvite] WARNING - Failed to update invite status:', updateError);
-        // Non-critical error - user is already added to tournament
-      } else {
-        console.log('[acceptInvite] SUCCESS - Invite status updated');
-      }
-
-      // STEP 8: VERIFY membership is readable from the SAME source of truth the detail page reads
-      console.log('[acceptInvite] STEP 8: Post-accept verification (verifying read access)...');
+      // STEP 7: VERIFY membership is readable BEFORE updating invite status
+      // (While has_pending_invite() still returns true, allowing read access)
+      console.log('[acceptInvite] STEP 7: Post-accept verification (verifying read access)...');
       
       const verifyResult = await this.getTournamentById(invite.tournament_id, user.id);
       
       if (!verifyResult) {
-        console.error('[acceptInvite] VERIFICATION FAILED - Tournament not readable after accept');
+        console.error('[acceptInvite] VERIFICATION FAILED - Tournament not readable after participant write');
         return { 
           ok: false, 
           tournamentId: invite.tournament_id, 
@@ -439,6 +426,21 @@ export const tournamentsService = {
       }
 
       console.log('[acceptInvite] VERIFICATION SUCCESS - User confirmed in participants array');
+
+      // STEP 8: Update invite status (AFTER verification passes)
+      console.log('[acceptInvite] STEP 8: Updating invite status to accepted...');
+      const { error: updateError } = await supabase
+        .from('tournament_invites')
+        .update({ status: newStatus })
+        .eq('id', inviteId);
+
+      if (updateError) {
+        console.error('[acceptInvite] WARNING - Failed to update invite status:', updateError);
+        // Non-critical error - user is already added to tournament and verified
+      } else {
+        console.log('[acceptInvite] SUCCESS - Invite status updated');
+      }
+
       console.log('[acceptInvite] COMPLETE - Successfully joined and verified');
       
       return { 
@@ -447,6 +449,7 @@ export const tournamentsService = {
         joined: true, 
         participantRecordFound: true 
       };
+
     } else {
       // Declining invite - just update status
       console.log('[acceptInvite] STEP 6: Declining invite, updating status...');

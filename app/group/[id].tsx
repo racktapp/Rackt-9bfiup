@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAlert } from '@/template';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
-import { Button } from '@/components';
+import { Button, UserAvatar, UserName } from '@/components';
 import { useGroups } from '@/hooks/useGroups';
 import { useMatches } from '@/hooks/useMatches';
 import { Group, GroupMember, Match } from '@/types';
@@ -31,6 +31,7 @@ export default function GroupDetailScreen() {
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<'monthly' | 'alltime'>('monthly');
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [selectedSport, setSelectedSport] = useState<Sport>('tennis');
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadUserId();
@@ -74,6 +75,13 @@ export default function GroupDetailScreen() {
     } catch (err) {
       console.error('Error loading leaderboard:', err);
     }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadGroupData();
+    await loadLeaderboard();
+    setRefreshing(false);
   };
 
   if (!userId || !id) {
@@ -138,16 +146,62 @@ export default function GroupDetailScreen() {
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.primary}
+          />
+        }
       >
-        {/* Group Info */}
-        <View style={styles.infoCard}>
-          <Text style={styles.infoLabel}>Sport Focus</Text>
-          <Text style={styles.infoValue}>
-            {group.sportFocus.charAt(0).toUpperCase() + group.sportFocus.slice(1)}
-          </Text>
-          <Text style={styles.infoLabel}>Members</Text>
-          <Text style={styles.infoValue}>{members.length}</Text>
+        {/* Group Cover Section */}
+        <View style={styles.coverSection}>
+          <View style={styles.coverGradient}>
+            <View style={styles.groupAvatarLarge}>
+              <MaterialIcons name="group" size={48} color={Colors.primary} />
+            </View>
+            <Text style={styles.groupNameLarge}>{group.name}</Text>
+            <View style={styles.groupMetaRow}>
+              <View style={styles.metaBadgeLarge}>
+                <MaterialIcons name="sports-tennis" size={16} color={Colors.textMuted} />
+                <Text style={styles.metaTextLarge}>
+                  {group.sportFocus === 'mixed' ? 'Tennis & Padel' : 
+                   group.sportFocus.charAt(0).toUpperCase() + group.sportFocus.slice(1)}
+                </Text>
+              </View>
+              <Text style={styles.metaDotLarge}>•</Text>
+              <View style={styles.metaBadgeLarge}>
+                <MaterialIcons name="people" size={16} color={Colors.textMuted} />
+                <Text style={styles.metaTextLarge}>{members.length} members</Text>
+              </View>
+            </View>
+          </View>
         </View>
+
+        {/* Members Horizontal Scroll */}
+        {members.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Members</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.membersScroll}
+            >
+              {members.map(member => (
+                <View key={member.userId} style={styles.memberChip}>
+                  <UserAvatar
+                    name={member.user?.displayName || member.user?.username}
+                    avatarUrl={member.user?.avatarUrl}
+                    size={40}
+                  />
+                  <Text style={styles.memberName} numberOfLines={1}>
+                    {member.user?.displayName?.split(' ')[0] || member.user?.username}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Leaderboard Preview */}
         <View style={styles.section}>
@@ -213,14 +267,36 @@ export default function GroupDetailScreen() {
             <View style={styles.leaderboardList}>
               {leaderboard.map(entry => (
                 <View key={entry.userId} style={styles.leaderboardRow}>
-                  <Text style={styles.rank}>#{entry.rank}</Text>
-                  <Text style={styles.playerName}>
-                    {entry.user?.displayName || entry.user?.username}
-                  </Text>
+                  <View style={[
+                    styles.rankBadge,
+                    entry.rank === 1 && styles.rankBadgeFirst,
+                    entry.rank === 2 && styles.rankBadgeSecond,
+                    entry.rank === 3 && styles.rankBadgeThird,
+                  ]}>
+                    <Text style={[
+                      styles.rankText,
+                      entry.rank <= 3 && styles.rankTextTop,
+                    ]}>#{entry.rank}</Text>
+                  </View>
+                  <UserAvatar
+                    name={entry.user?.displayName || entry.user?.username}
+                    avatarUrl={entry.user?.avatarUrl}
+                    size={44}
+                  />
+                  <View style={styles.playerInfo}>
+                    <UserName
+                      profile={entry.user}
+                      displayNameStyle={styles.playerName}
+                      numberOfLines={1}
+                    />
+                    <Text style={styles.record}>
+                      {entry.wins}W–{entry.losses}L • {entry.winPercentage.toFixed(0)}%
+                    </Text>
+                  </View>
                   <View style={styles.stats}>
                     <Text style={styles.level}>{entry.level.toFixed(1)}</Text>
-                    <Text style={styles.record}>
-                      {entry.wins}W-{entry.losses}L
+                    <Text style={styles.reliability}>
+                      {(entry.reliability * 100).toFixed(0)}%
                     </Text>
                   </View>
                 </View>
@@ -269,11 +345,18 @@ export default function GroupDetailScreen() {
           )}
         </View>
 
-        <Button
-          title="Log Match"
-          onPress={() => router.push('/(tabs)/add-match')}
-          fullWidth
-        />
+        <View style={styles.stickyButton}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.logMatchButton,
+              pressed && styles.logMatchButtonPressed,
+            ]}
+            onPress={() => router.push('/(tabs)/add-match')}
+          >
+            <MaterialIcons name="add-circle" size={24} color={Colors.textPrimary} />
+            <Text style={styles.logMatchButtonText}>Log Match</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -315,23 +398,67 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: Spacing.xxl,
   },
-  infoCard: {
+  coverSection: {
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: Spacing.lg,
+    overflow: 'hidden',
+    marginBottom: Spacing.md,
+  },
+  coverGradient: {
+    padding: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: `${Colors.primary}10`,
+  },
+  groupAvatarLarge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: Colors.primary + '40',
+  },
+  groupNameLarge: {
+    fontSize: Typography.sizes.xxl,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+  },
+  groupMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.sm,
   },
-  infoLabel: {
+  metaBadgeLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaTextLarge: {
     fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
   },
-  infoValue: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
+  metaDotLarge: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+  },
+  membersScroll: {
+    paddingVertical: Spacing.sm,
+    gap: Spacing.md,
+  },
+  memberChip: {
+    alignItems: 'center',
+    gap: Spacing.xs,
+    width: 64,
+  },
+  memberName: {
+    fontSize: Typography.sizes.xs,
     color: Colors.textPrimary,
-    marginBottom: Spacing.sm,
+    textAlign: 'center',
   },
   section: {
     gap: Spacing.md,
@@ -387,33 +514,70 @@ const styles = StyleSheet.create({
   },
   leaderboardRow: {
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: Spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  rank: {
-    fontSize: Typography.sizes.base,
+  rankBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  rankBadgeFirst: {
+    backgroundColor: Colors.accentGold + '20',
+    borderColor: Colors.accentGold,
+  },
+  rankBadgeSecond: {
+    backgroundColor: Colors.primary + '20',
+    borderColor: Colors.primary,
+  },
+  rankBadgeThird: {
+    backgroundColor: Colors.warning + '20',
+    borderColor: Colors.warning,
+  },
+  rankText: {
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
     color: Colors.textMuted,
-    width: 32,
+  },
+  rankTextTop: {
+    color: Colors.textPrimary,
+  },
+  playerInfo: {
+    flex: 1,
+    gap: 2,
   },
   playerName: {
-    flex: 1,
     fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
     color: Colors.textPrimary,
   },
   stats: {
     alignItems: 'flex-end',
-    gap: Spacing.xs,
+    gap: 2,
   },
   level: {
-    fontSize: Typography.sizes.lg,
+    fontSize: 24,
     fontWeight: Typography.weights.bold,
-    color: Colors.primary,
+    color: Colors.textPrimary,
+  },
+  reliability: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
   },
   record: {
     fontSize: Typography.sizes.xs,
@@ -472,6 +636,32 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: Typography.sizes.xl,
     fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  stickyButton: {
+    marginTop: Spacing.md,
+  },
+  logMatchButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  logMatchButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
+  },
+  logMatchButtonText: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
 });

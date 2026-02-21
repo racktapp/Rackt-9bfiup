@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
-import { Input, Button, Avatar, LoadingSpinner } from '@/components';
+import { Input, Button, Avatar, LoadingSpinner, UserAvatar } from '@/components';
 import { Sport } from '@/constants/config';
 import { useGroups } from '@/hooks/useGroups';
 import { useFriends } from '@/hooks/useFriends';
@@ -23,6 +23,7 @@ export default function CreateGroupScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [sportFocus, setSportFocus] = useState<Sport | 'mixed'>('mixed');
+  const [isPrivate, setIsPrivate] = useState(false);
   const [friends, setFriends] = useState<Friendship[]>([]);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(true);
@@ -118,52 +119,99 @@ export default function CreateGroupScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Input
-          label="Group Name"
-          value={name}
-          onChangeText={setName}
-          placeholder="Tennis Club"
-        />
+        {/* Group Name Input */}
+        <View style={styles.inputSection}>
+          <Text style={styles.inputLabel}>Group Name</Text>
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g., Tennis Club, Weekend Warriors"
+            placeholderTextColor={Colors.textMuted}
+          />
+        </View>
 
+        {/* Sport Focus Segmented Control */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Sport Focus</Text>
-          <View style={styles.optionsRow}>
+          <View style={styles.segmentedControl}>
             <Pressable
-              style={[styles.chip, sportFocus === 'tennis' && styles.chipSelected]}
+              style={[styles.segment, sportFocus === 'tennis' && styles.segmentActive]}
               onPress={() => setSportFocus('tennis')}
             >
-              <Text style={[styles.chipText, sportFocus === 'tennis' && styles.chipTextSelected]}>
+              <Image
+                source={require('@/assets/icons/tennis_icon.png')}
+                style={[styles.sportIcon, sportFocus !== 'tennis' && styles.sportIconInactive]}
+                contentFit="contain"
+                transition={0}
+              />
+              <Text style={[styles.segmentText, sportFocus === 'tennis' && styles.segmentTextActive]}>
                 Tennis
               </Text>
             </Pressable>
             <Pressable
-              style={[styles.chip, sportFocus === 'padel' && styles.chipSelected]}
+              style={[styles.segment, sportFocus === 'padel' && styles.segmentActive]}
               onPress={() => setSportFocus('padel')}
             >
-              <Text style={[styles.chipText, sportFocus === 'padel' && styles.chipTextSelected]}>
+              <Image
+                source={require('@/assets/icons/padel_icon.png')}
+                style={[styles.sportIcon, sportFocus !== 'padel' && styles.sportIconInactive]}
+                contentFit="contain"
+                transition={0}
+              />
+              <Text style={[styles.segmentText, sportFocus === 'padel' && styles.segmentTextActive]}>
                 Padel
               </Text>
             </Pressable>
             <Pressable
-              style={[styles.chip, sportFocus === 'mixed' && styles.chipSelected]}
+              style={[styles.segment, sportFocus === 'mixed' && styles.segmentActive]}
               onPress={() => setSportFocus('mixed')}
             >
-              <Text style={[styles.chipText, sportFocus === 'mixed' && styles.chipTextSelected]}>
-                Mixed
+              <MaterialIcons 
+                name="sports" 
+                size={20} 
+                color={sportFocus === 'mixed' ? Colors.textPrimary : Colors.textMuted} 
+              />
+              <Text style={[styles.segmentText, sportFocus === 'mixed' && styles.segmentTextActive]}>
+                Both
               </Text>
             </Pressable>
           </View>
         </View>
 
+        {/* Privacy Toggle */}
+        <View style={styles.section}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleInfo}>
+              <Text style={styles.toggleLabel}>Private Group</Text>
+              <Text style={styles.toggleHint}>Only invited members can join</Text>
+            </View>
+            <Pressable
+              style={[styles.toggle, isPrivate && styles.toggleActive]}
+              onPress={() => setIsPrivate(!isPrivate)}
+            >
+              <View style={[styles.toggleThumb, isPrivate && styles.toggleThumbActive]} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Invite Friends */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Invite Friends (Optional)</Text>
           {isLoadingFriends ? (
-            <Text style={styles.helperText}>Loading friends...</Text>
+            <View style={styles.loadingContainer}>
+              <LoadingSpinner size={24} />
+              <Text style={styles.helperText}>Loading friends...</Text>
+            </View>
           ) : friends.length === 0 ? (
-            <Text style={styles.helperText}>Add friends first to invite them</Text>
+            <View style={styles.emptyFriendsCard}>
+              <MaterialIcons name="people-outline" size={32} color={Colors.textMuted} />
+              <Text style={styles.emptyFriendsText}>No friends to invite yet</Text>
+              <Text style={styles.emptyFriendsHint}>Add friends to invite them to groups</Text>
+            </View>
           ) : (
             <View style={styles.friendsList}>
               {friends.map(friendship => {
@@ -173,20 +221,29 @@ export default function CreateGroupScreen() {
                 return (
                   <Pressable
                     key={friendship.id}
-                    style={[styles.friendCard, isSelected && styles.friendCardSelected]}
+                    style={({ pressed }) => [
+                      styles.friendCard,
+                      isSelected && styles.friendCardSelected,
+                      pressed && styles.friendCardPressed,
+                    ]}
                     onPress={() => toggleFriend(friendId)}
                   >
-                    <Avatar
-                      imageUrl={friendship.friend?.avatarUrl}
-                      initials={friendship.friend?.initials}
-                      size="sm"
+                    <UserAvatar
+                      name={friendship.friend?.displayName || friendship.friend?.username}
+                      avatarUrl={friendship.friend?.avatarUrl}
+                      size={44}
                     />
                     <Text style={styles.friendName}>
-                      {friendship.friend?.displayName}
+                      {friendship.friend?.displayName || friendship.friend?.username}
                     </Text>
-                    {isSelected && (
-                      <MaterialIcons name="check-circle" size={20} color={Colors.primary} />
-                    )}
+                    <View style={[
+                      styles.checkCircle,
+                      isSelected && styles.checkCircleActive,
+                    ]}>
+                      {isSelected && (
+                        <MaterialIcons name="check" size={16} color={Colors.textPrimary} />
+                      )}
+                    </View>
                   </Pressable>
                 );
               })}
@@ -194,16 +251,35 @@ export default function CreateGroupScreen() {
           )}
         </View>
 
-        {error && <Text style={styles.errorText}>{error}</Text>}
-
-        <Button
-          title="Create Group"
-          onPress={handleSubmit}
-          fullWidth
-          disabled={submitting}
-          icon={submitting ? <LoadingSpinner size={20} /> : undefined}
-        />
+        {error && (
+          <View style={styles.errorBanner}>
+            <MaterialIcons name="error-outline" size={20} color={Colors.danger} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
       </ScrollView>
+
+      {/* Sticky Create Button */}
+      <View style={[styles.stickyButtonContainer, { paddingBottom: insets.bottom + Spacing.md }]}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.createButton,
+            pressed && styles.createButtonPressed,
+            submitting && styles.createButtonDisabled,
+          ]}
+          onPress={handleSubmit}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <LoadingSpinner size={24} />
+          ) : (
+            <MaterialIcons name="add-circle" size={24} color={Colors.textPrimary} />
+          )}
+          <Text style={styles.createButtonText}>
+            {submitting ? 'Creating...' : 'Create Group'}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -231,7 +307,25 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Spacing.lg,
-    gap: Spacing.lg,
+    gap: Spacing.xl,
+  },
+  inputSection: {
+    gap: Spacing.sm,
+  },
+  inputLabel: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  input: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    fontSize: Typography.sizes.base,
+    color: Colors.textPrimary,
   },
   section: {
     gap: Spacing.sm,
@@ -241,41 +335,125 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.semibold,
     color: Colors.textPrimary,
   },
-  optionsRow: {
+  segmentedControl: {
     flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  chip: {
-    flex: 1,
     backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
+    padding: 4,
+    gap: 4,
   },
-  chipSelected: {
+  segment: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  segmentActive: {
+    backgroundColor: Colors.primary,
+  },
+  segmentText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+    fontWeight: Typography.weights.medium,
+  },
+  segmentTextActive: {
+    color: Colors.textPrimary,
+    fontWeight: Typography.weights.semibold,
+  },
+  sportIcon: {
+    width: 18,
+    height: 18,
+  },
+  sportIconInactive: {
+    opacity: 0.5,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.lg,
+  },
+  toggleInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  toggleLabel: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  toggleHint: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+  },
+  toggle: {
+    width: 52,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    justifyContent: 'center',
+    padding: 2,
+  },
+  toggleActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  chipText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textPrimary,
+  toggleThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.textPrimary,
   },
-  chipTextSelected: {
-    fontWeight: Typography.weights.semibold,
+  toggleThumbActive: {
+    alignSelf: 'flex-end',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.lg,
+    gap: Spacing.sm,
   },
   helperText: {
     fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
+  },
+  emptyFriendsCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
+    padding: Spacing.xl,
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  emptyFriendsText: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  emptyFriendsHint: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
   },
   friendsList: {
     gap: Spacing.sm,
   },
   friendCard: {
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 2,
     borderColor: Colors.border,
     padding: Spacing.md,
     flexDirection: 'row',
@@ -284,17 +462,82 @@ const styles = StyleSheet.create({
   },
   friendCardSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: Colors.primary + '10',
   },
-
+  friendCardPressed: {
+    opacity: 0.7,
+  },
   friendName: {
     flex: 1,
     fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.medium,
     color: Colors.textPrimary,
   },
+  checkCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+  },
+  checkCircleActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.danger + '15',
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.danger,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+  },
   errorText: {
+    flex: 1,
     color: Colors.danger,
     fontSize: Typography.sizes.sm,
-    textAlign: 'center',
+    fontWeight: Typography.weights.medium,
+  },
+  stickyButtonContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    backgroundColor: Colors.background,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  createButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  createButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
+  },
+  createButtonDisabled: {
+    opacity: 0.6,
+  },
+  createButtonText: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
   },
 });

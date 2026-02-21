@@ -67,44 +67,53 @@ export const tournamentsService = {
     return this.mapTournament(tournament);
   },
 
-  async getTournamentById(tournamentId: string, retries: number = 3): Promise<Tournament> {
-    console.log(`[getTournamentById] Fetching tournament: ${tournamentId}, retries left: ${retries}`);
+  async getTournamentById(tournamentId: string, currentUserId?: string): Promise<Tournament | null> {
+    console.log(`[tournamentDetailFetch] START - tournamentId=${tournamentId}, userId=${currentUserId}`);
     
+    // Use array query instead of .single() to avoid throwing on 0 rows
     const { data, error } = await supabase
       .from('tournaments')
       .select('*')
       .eq('id', tournamentId)
-      .is('deleted_at', null)
-      .single();
+      .is('deleted_at', null);
 
     if (error) {
-      console.error('[getTournamentById] ERROR:', {
+      console.error('[tournamentDetailFetch] Query ERROR:', {
         message: error.message,
         code: error.code,
         details: error.details,
         hint: error.hint,
         tournamentId,
       });
-      
-      // If no rows returned and we have retries left, wait and retry
-      // This handles RLS propagation delays after accepting invites
-      if (error.code === 'PGRST116' && retries > 0) {
-        console.log(`[getTournamentById] No rows returned, retrying in 300ms... (${retries} retries left)`);
-        await new Promise(resolve => setTimeout(resolve, 300));
-        return this.getTournamentById(tournamentId, retries - 1);
-      }
-      
       throw error;
     }
     
-    console.log('[getTournamentById] SUCCESS:', {
-      id: data.id,
-      title: data.title,
-      state: data.state,
-      participantCount: data.participants?.length || 0,
+    const resultCount = data?.length || 0;
+    console.log('[tournamentDetailFetch] resultCount:', resultCount);
+
+    // Handle 3 cases explicitly
+    if (resultCount === 0) {
+      console.log('[tournamentDetailFetch] NOT_FOUND - No tournament with this ID or RLS blocked access');
+      return null; // Return null instead of throwing
+    }
+
+    if (resultCount > 1) {
+      console.warn('[tournamentDetailFetch] DATA_INTEGRITY_ISSUE - Multiple tournaments with same ID:', {
+        tournamentId,
+        count: resultCount,
+      });
+      // Use first record
+    }
+    
+    const tournament = data[0];
+    console.log('[tournamentDetailFetch] SUCCESS:', {
+      id: tournament.id,
+      title: tournament.title,
+      state: tournament.state,
+      participantCount: tournament.participants?.length || 0,
     });
     
-    return this.mapTournament(data);
+    return this.mapTournament(tournament);
   },
 
   async listTournamentsForUser(userId: string): Promise<{ active: Tournament[]; completed: Tournament[] }> {
@@ -209,14 +218,14 @@ export const tournamentsService = {
     }));
   },
 
-  async respondToInvite(inviteId: string, accept: boolean): Promise<{ tournamentId?: string }> {
+  async respondToInvite(inviteId: string, accept: boolean): Promise<{ ok: boolean; tournamentId?: string; joined?: boolean; participantRecordFound?: boolean; error?: string }> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    console.log(`[respondToInvite] START - inviteId=${inviteId}, userId=${user.id}, accept=${accept}`);
+    console.log(`[acceptInvite] START - inviteId=${inviteId}, userId=${user.id}, accept=${accept}`);
 
     // STEP 1: Get invite details to validate
-    console.log('[respondToInvite] STEP 1: Fetching invite...');
+    console.log('[acceptInvite] STEP 1: Fetching invite...');
     const { data: invite, error: inviteReadError } = await supabase
       .from('tournament_invites')
       .select('id, tournament_id, invited_user_id, status')
@@ -224,7 +233,7 @@ export const tournamentsService = {
       .single();
 
     if (inviteReadError || !invite) {
-      console.error('[respondToInvite] ERROR - Invite not found:', {
+      console.error('[acceptInvite] ERROR - Invite not found:', {
         error: inviteReadError,
         message: inviteReadError?.message,
         code: inviteReadError?.code,
@@ -232,11 +241,11 @@ export const tournamentsService = {
       throw new Error('Invite not found or has been deleted');
     }
 
-    console.log('[respondToInvite] Invite data:', invite);
+    console.log('[acceptInvite] Invite data:', invite);
 
     // STEP 2: Validate permissions
     if (invite.invited_user_id !== user.id) {
-      console.error('[respondToInvite] ERROR - Permission denied:', {
+      console.error('[acceptInvite] ERROR - Permission denied:', {
         invitedUserId: invite.invited_user_id,
         currentUserId: user.id,
       });
@@ -244,12 +253,12 @@ export const tournamentsService = {
     }
 
     if (invite.status !== 'pending') {
-      console.error(`[respondToInvite] ERROR - Invite already ${invite.status}`);
+      console.error(`[acceptInvite] ERROR - Invite already ${invite.status}`);
       throw new Error(`This invite has already been ${invite.status}`);
     }
 
     // STEP 3: Verify tournament exists and is valid
-    console.log('[respondToInvite] STEP 3: Fetching tournament...');
+    console.log('[acceptInvite] STEP 3: Fetching tournament...');
     const { data: tournamentCheck, error: tournamentCheckError } = await supabase
       .from('tournaments')
       .select('id, state, participants, created_by_user_id, title, deleted_at')
@@ -257,7 +266,7 @@ export const tournamentsService = {
       .single();
 
     if (tournamentCheckError || !tournamentCheck) {
-      console.error('[respondToInvite] ERROR - Tournament not found:', {
+      console.error('[acceptInvite] ERROR - Tournament not found:', {
         error: tournamentCheckError,
         message: tournamentCheckError?.message,
         code: tournamentCheckError?.code,
@@ -265,7 +274,7 @@ export const tournamentsService = {
       });
       
       // Mark invite as expired
-      console.log('[respondToInvite] Marking invite as expired...');
+      console.log('[acceptInvite] Marking invite as expired...');
       await supabase
         .from('tournament_invites')
         .update({ status: 'expired' })
@@ -274,7 +283,7 @@ export const tournamentsService = {
       throw new Error('This tournament no longer exists or has been deleted');
     }
 
-    console.log('[respondToInvite] Tournament data:', {
+    console.log('[acceptInvite] Tournament data:', {
       id: tournamentCheck.id,
       title: tournamentCheck.title,
       state: tournamentCheck.state,
@@ -285,7 +294,7 @@ export const tournamentsService = {
 
     // Check if tournament is soft-deleted
     if (tournamentCheck.deleted_at) {
-      console.error('[respondToInvite] ERROR - Tournament deleted at:', tournamentCheck.deleted_at);
+      console.error('[acceptInvite] ERROR - Tournament deleted at:', tournamentCheck.deleted_at);
       
       // Mark invite as expired
       await supabase
@@ -297,7 +306,7 @@ export const tournamentsService = {
     }
 
     if (tournamentCheck.state === 'completed') {
-      console.error('[respondToInvite] ERROR - Tournament completed');
+      console.error('[acceptInvite] ERROR - Tournament completed');
       throw new Error('This tournament has already completed');
     }
 
@@ -305,7 +314,7 @@ export const tournamentsService = {
 
     if (accept) {
       // STEP 4: Get user profile
-      console.log('[respondToInvite] STEP 4: Fetching user profile...');
+      console.log('[acceptInvite] STEP 4: Fetching user profile...');
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('id, username, display_name, avatar_url')
@@ -313,11 +322,11 @@ export const tournamentsService = {
         .single();
 
       if (profileError) {
-        console.error('[respondToInvite] ERROR - Failed to fetch profile:', profileError);
+        console.error('[acceptInvite] ERROR - Failed to fetch profile:', profileError);
         throw new Error('Failed to load your profile. Please try again.');
       }
 
-      console.log('[respondToInvite] Profile data:', profile);
+      console.log('[acceptInvite] Profile data:', profile);
 
       const newParticipant: TournamentParticipant = {
         userId: user.id,
@@ -328,13 +337,13 @@ export const tournamentsService = {
         seed: null,
       };
 
-      // STEP 5: Check if user already in participants
+      // STEP 5: Check if user already in participants (idempotency)
       const alreadyParticipant = tournamentCheck.participants?.some(
         (p: TournamentParticipant) => p.userId === user.id
       );
 
       if (alreadyParticipant) {
-        console.log('[respondToInvite] User already a participant, just updating invite status');
+        console.log('[acceptInvite] User already a participant (idempotent), just updating invite status');
         
         // Just update invite status
         const { error: updateError } = await supabase
@@ -343,18 +352,24 @@ export const tournamentsService = {
           .eq('id', inviteId);
 
         if (updateError) {
-          console.error('[respondToInvite] ERROR - Failed to update invite:', updateError);
+          console.error('[acceptInvite] ERROR - Failed to update invite:', updateError);
           throw new Error('Failed to update invite status');
         }
         
-        console.log('[respondToInvite] SUCCESS - Already participant, invite updated');
-        return { tournamentId: invite.tournament_id };
+        console.log('[acceptInvite] SUCCESS - Already participant, invite updated');
+        console.log('[acceptInvite] STEP 8: Post-accept verification (already member)...');
+        return { 
+          ok: true, 
+          tournamentId: invite.tournament_id, 
+          joined: true, 
+          participantRecordFound: true 
+        };
       }
 
       const updatedParticipants = [...(tournamentCheck.participants || []), newParticipant];
 
-      console.log('[respondToInvite] STEP 6: Adding user to tournament participants...');
-      console.log('[respondToInvite] New participant count:', updatedParticipants.length);
+      console.log('[acceptInvite] STEP 6: Adding user to tournament participants (ATOMIC)...');
+      console.log('[acceptInvite] New participant count:', updatedParticipants.length);
 
       // ATOMIC UPDATE: Update tournament to add participant
       const { error: tournamentError } = await supabase
@@ -366,7 +381,7 @@ export const tournamentsService = {
         .eq('id', invite.tournament_id);
 
       if (tournamentError) {
-        console.error('[respondToInvite] ERROR - Failed to add participant:', {
+        console.error('[acceptInvite] ERROR - Failed to add participant (write):', {
           error: tournamentError,
           message: tournamentError.message,
           code: tournamentError.code,
@@ -376,40 +391,77 @@ export const tournamentsService = {
         throw new Error(`Failed to join tournament: ${tournamentError.message || 'Unknown error'}`);
       }
 
-      console.log('[respondToInvite] SUCCESS - User added to tournament');
+      console.log('[acceptInvite] SUCCESS - Participant write complete');
 
       // STEP 7: Update invite status
-      console.log('[respondToInvite] STEP 7: Updating invite status...');
+      console.log('[acceptInvite] STEP 7: Updating invite status...');
       const { error: updateError } = await supabase
         .from('tournament_invites')
         .update({ status: newStatus })
         .eq('id', inviteId);
 
       if (updateError) {
-        console.error('[respondToInvite] WARNING - Failed to update invite status:', updateError);
+        console.error('[acceptInvite] WARNING - Failed to update invite status:', updateError);
         // Non-critical error - user is already added to tournament
       } else {
-        console.log('[respondToInvite] SUCCESS - Invite status updated');
+        console.log('[acceptInvite] SUCCESS - Invite status updated');
       }
 
-      console.log('[respondToInvite] COMPLETE - Successfully joined tournament');
+      // STEP 8: VERIFY membership is readable from the SAME source of truth the detail page reads
+      console.log('[acceptInvite] STEP 8: Post-accept verification (verifying read access)...');
       
-      return { tournamentId: invite.tournament_id };
+      const verifyResult = await this.getTournamentById(invite.tournament_id, user.id);
+      
+      if (!verifyResult) {
+        console.error('[acceptInvite] VERIFICATION FAILED - Tournament not readable after accept');
+        return { 
+          ok: false, 
+          tournamentId: invite.tournament_id, 
+          joined: true, 
+          participantRecordFound: false,
+          error: 'Membership written but not yet readable. Tournament will be accessible in a moment.' 
+        };
+      }
+
+      const userIsInParticipants = verifyResult.participants?.some(
+        (p: TournamentParticipant) => p.userId === user.id
+      );
+
+      if (!userIsInParticipants) {
+        console.error('[acceptInvite] VERIFICATION FAILED - User not in participants array after write');
+        return { 
+          ok: false, 
+          tournamentId: invite.tournament_id, 
+          joined: false, 
+          participantRecordFound: false,
+          error: 'Failed to verify tournament membership' 
+        };
+      }
+
+      console.log('[acceptInvite] VERIFICATION SUCCESS - User confirmed in participants array');
+      console.log('[acceptInvite] COMPLETE - Successfully joined and verified');
+      
+      return { 
+        ok: true, 
+        tournamentId: invite.tournament_id, 
+        joined: true, 
+        participantRecordFound: true 
+      };
     } else {
       // Declining invite - just update status
-      console.log('[respondToInvite] STEP 6: Declining invite, updating status...');
+      console.log('[acceptInvite] STEP 6: Declining invite, updating status...');
       const { error: updateError } = await supabase
         .from('tournament_invites')
         .update({ status: newStatus })
         .eq('id', inviteId);
 
       if (updateError) {
-        console.error('[respondToInvite] ERROR - Failed to decline invite:', updateError);
+        console.error('[acceptInvite] ERROR - Failed to decline invite:', updateError);
         throw new Error('Failed to decline invite');
       }
       
-      console.log('[respondToInvite] COMPLETE - Invite declined');
-      return {};
+      console.log('[acceptInvite] COMPLETE - Invite declined');
+      return { ok: true, joined: false };
     }
   },
 

@@ -78,23 +78,42 @@ export default function TournamentsHomeScreen() {
       // INSTRUMENTATION: Call service with logging
       console.log('[TournamentInvite] Calling respondToInvite service...');
       const result = await tournamentsService.respondToInvite(inviteId, accept);
-      console.log('[TournamentInvite] Service call successful:', result);
+      console.log('[TournamentInvite] Service call result:', result);
       
       // Reload tournaments to update the list
       console.log('[TournamentInvite] Reloading tournaments...');
       await loadTournaments();
       
-      if (accept && result.tournamentId) {
-        // Show success message
-        showAlert('Success', 'You have joined the tournament!');
-        
-        // Navigate to tournament detail after successful acceptance
-        // Increased delay to 800ms to ensure RLS propagation
-        console.log('[TournamentInvite] Navigating to tournament detail...');
-        setTimeout(() => {
+      if (accept) {
+        // GUARDED NAVIGATION: Only navigate if membership is confirmed
+        if (result.ok && result.joined && result.participantRecordFound && result.tournamentId) {
+          console.log('[TournamentInvite] Join VERIFIED - Safe to navigate');
+          
+          // Show success message
+          showAlert('Success', 'You have joined the tournament!');
+          
+          // Navigate immediately - no need for delay since verification passed
+          console.log('[TournamentInvite] Navigating to tournament detail...');
           router.push(`/tournaments/${result.tournamentId}`);
-        }, 800);
-      } else if (!accept) {
+        } else if (result.ok && result.joined && !result.participantRecordFound && result.tournamentId) {
+          console.warn('[TournamentInvite] Join written but NOT verified - Showing safe error instead of navigating');
+          
+          // Show user-safe error with helpful guidance
+          showAlert(
+            'Invite Accepted', 
+            'Your invite was accepted, but the tournament is not ready yet. Please open it from Dashboard → Tournaments in a moment.'
+          );
+        } else if (!result.ok && result.error) {
+          console.error('[TournamentInvite] Join FAILED - Service returned error');
+          showAlert('Error', result.error);
+        } else {
+          console.error('[TournamentInvite] Unexpected result structure:', result);
+          showAlert(
+            'Invite Accepted', 
+            'Invite accepted, but tournament may not be immediately accessible. Please refresh the tournaments list.'
+          );
+        }
+      } else {
         showAlert('Invite Declined', 'You have declined the tournament invitation.');
       }
     } catch (err: any) {

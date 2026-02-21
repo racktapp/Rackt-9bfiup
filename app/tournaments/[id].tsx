@@ -37,6 +37,7 @@ export default function TournamentDetailScreen() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notFoundState, setNotFoundState] = useState<'loading' | 'not_found' | 'access_pending' | 'success'>('loading');
 
   useEffect(() => {
     loadUserId();
@@ -70,10 +71,32 @@ export default function TournamentDetailScreen() {
 
     try {
       setError(null);
-      const data = await tournamentsService.getTournamentById(id);
-      setTournament(data);
+      setNotFoundState('loading');
+      
+      console.log('[TournamentDetail] Loading tournament:', id, 'for user:', userId);
+      
+      const data = await tournamentsService.getTournamentById(id as string, userId || undefined);
+      
+      if (!data) {
+        // Tournament not found or not accessible
+        console.log('[TournamentDetail] Tournament not found or not accessible yet');
+        setNotFoundState('access_pending');
+        setTournament(null);
+        setError('Tournament not found or not accessible yet');
+      } else {
+        console.log('[TournamentDetail] Tournament loaded successfully:', data.title);
+        setNotFoundState('success');
+        setTournament(data);
+        setError(null);
+      }
     } catch (err: any) {
-      console.error('Error loading tournament:', err);
+      console.error('[TournamentDetail] Error loading tournament:', {
+        message: err.message,
+        code: err.code,
+        tournamentId: id,
+        userId,
+      });
+      setNotFoundState('not_found');
       setError(err.message || 'Failed to load tournament');
     } finally {
       setIsLoading(false);
@@ -798,6 +821,21 @@ export default function TournamentDetailScreen() {
   }
 
   if (error || !tournament) {
+    // Handle 3 states: not_found, access_pending, generic error
+    let errorMessage = error || 'Tournament not found';
+    let errorTitle = 'Something went wrong';
+    let canRetry = true;
+    
+    if (notFoundState === 'access_pending') {
+      errorTitle = 'Not Ready Yet';
+      errorMessage = "We couldn't load the tournament yet. It may have just been created or you may have just joined. Pull to refresh or open it again in a moment.";
+      canRetry = true;
+    } else if (notFoundState === 'not_found') {
+      errorTitle = 'Not Found';
+      errorMessage = 'This tournament no longer exists or you do not have access to it.';
+      canRetry = false;
+    }
+    
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
@@ -807,7 +845,32 @@ export default function TournamentDetailScreen() {
           <Text style={styles.headerTitle}>Tournament</Text>
           <View style={{ width: 24 }} />
         </View>
-        <ErrorState message={error || 'Tournament not found'} onRetry={loadTournament} />
+        
+        {/* Custom error state with better messaging */}
+        <View style={styles.errorContainer}>
+          <MaterialIcons 
+            name={notFoundState === 'access_pending' ? 'hourglass-empty' : 'error-outline'} 
+            size={64} 
+            color={Colors.textMuted} 
+          />
+          <Text style={styles.errorTitle}>{errorTitle}</Text>
+          <Text style={styles.errorMessage}>{errorMessage}</Text>
+          
+          <View style={styles.errorActions}>
+            {canRetry && (
+              <Button
+                title="Retry"
+                onPress={loadTournament}
+                icon={<MaterialIcons name="refresh" size={20} color={Colors.textPrimary} />}
+              />
+            )}
+            <Button
+              title="Go Back"
+              onPress={() => router.back()}
+              variant="secondary"
+            />
+          </View>
+        </View>
       </View>
     );
   }
@@ -1409,5 +1472,29 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.semibold,
     color: '#FFFFFF',
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.xxl,
+    gap: Spacing.lg,
+  },
+  errorTitle: {
+    fontSize: Typography.sizes.xl,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: Typography.sizes.base,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  errorActions: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.md,
   },
 });

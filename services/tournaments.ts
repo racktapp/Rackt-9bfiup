@@ -212,10 +212,28 @@ export const tournamentsService = {
 
     if (error) throw error;
 
-    return (data || []).map(raw => ({
-      ...this.mapInvite(raw),
-      tournament: raw.tournament ? this.mapTournament(raw.tournament) : undefined,
-    }));
+    // Filter out invites for deleted tournaments
+    // Supabase join doesn't respect deleted_at filter, so we filter client-side
+    const invites = (data || [])
+      .filter(raw => {
+        // Exclude invites where tournament is deleted
+        if (raw.tournament && raw.tournament.deleted_at) {
+          console.log(`[getPendingInvites] Filtering out invite for deleted tournament: ${raw.tournament.title}`);
+          return false;
+        }
+        // Exclude invites where tournament doesn't exist
+        if (!raw.tournament) {
+          console.log('[getPendingInvites] Filtering out invite with missing tournament');
+          return false;
+        }
+        return true;
+      })
+      .map(raw => ({
+        ...this.mapInvite(raw),
+        tournament: raw.tournament ? this.mapTournament(raw.tournament) : undefined,
+      }));
+
+    return invites;
   },
 
   async respondToInvite(inviteId: string, accept: boolean): Promise<{ ok: boolean; tournamentId?: string; joined?: boolean; participantRecordFound?: boolean; error?: string }> {

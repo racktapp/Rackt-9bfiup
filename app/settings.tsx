@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAlert } from '@/template';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
-import { UserAvatar, Button, LoadingSpinner } from '@/components';
+import { UserAvatar, UserName, Button, LoadingSpinner } from '@/components';
 import { SettingsRow, SettingsSection } from '@/components/settings';
 import { getSupabaseClient } from '@/template';
 import { storageService } from '@/services/storage';
@@ -166,8 +166,12 @@ export default function SettingsScreen() {
             size={80}
           />
           <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{user?.displayName}</Text>
-            <Text style={styles.profileUsername}>@{user?.username}</Text>
+            <UserName
+              profile={user}
+              showHandle
+              displayNameStyle={styles.profileName}
+              handleStyle={styles.profileUsername}
+            />
           </View>
           <Button
             title={uploading ? 'Uploading...' : 'Change Photo'}

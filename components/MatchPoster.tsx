@@ -83,20 +83,22 @@ export const MatchPoster = React.forwardRef<View, MatchPosterProps>(
                   size={64}
                 />
               </View>
-              <Text
-                style={[styles.teamName, { fontSize: 24 * scale }]}
-                numberOfLines={1}
-              >
-                {data.teamAName}
-              </Text>
-              {data.teamAHandle && (
+              <View style={{ alignItems: 'center', width: '100%' }}>
                 <Text
-                  style={[styles.teamHandle, { fontSize: 14 * scale }]}
+                  style={[styles.teamName, { fontSize: 24 * scale }]}
                   numberOfLines={1}
                 >
-                  {data.teamAHandle}
+                  {data.teamAName}
                 </Text>
-              )}
+                {data.teamAHandle && (
+                  <Text
+                    style={[styles.teamHandle, { fontSize: 14 * scale }]}
+                    numberOfLines={1}
+                  >
+                    {data.teamAHandle}
+                  </Text>
+                )}
+              </View>
             </View>
 
             {/* VS */}
@@ -125,20 +127,22 @@ export const MatchPoster = React.forwardRef<View, MatchPosterProps>(
                   size={64}
                 />
               </View>
-              <Text
-                style={[styles.teamName, { fontSize: 24 * scale }]}
-                numberOfLines={1}
-              >
-                {data.teamBName}
-              </Text>
-              {data.teamBHandle && (
+              <View style={{ alignItems: 'center', width: '100%' }}>
                 <Text
-                  style={[styles.teamHandle, { fontSize: 14 * scale }]}
+                  style={[styles.teamName, { fontSize: 24 * scale }]}
                   numberOfLines={1}
                 >
-                  {data.teamBHandle}
+                  {data.teamBName}
                 </Text>
-              )}
+                {data.teamBHandle && (
+                  <Text
+                    style={[styles.teamHandle, { fontSize: 14 * scale }]}
+                    numberOfLines={1}
+                  >
+                    {data.teamBHandle}
+                  </Text>
+                )}
+              </View>
             </View>
           </View>
 

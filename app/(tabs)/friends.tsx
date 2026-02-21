@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAlert } from '@/template';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
-import { Button, UserAvatar, ScreenLoader, EmptyState, ErrorState } from '@/components';
+import { Button, UserAvatar, UserName, ScreenLoader, EmptyState, ErrorState } from '@/components';
 import { useFriends } from '@/hooks/useFriends';
 import { User, FriendRequest, Friendship } from '@/types';
 import { getSupabaseClient } from '@/template';
@@ -144,8 +144,12 @@ export default function FriendsScreen() {
               size={48}
             />
             <View style={styles.friendInfo}>
-              <Text style={styles.friendName}>{friendship.friend?.displayName}</Text>
-              <Text style={styles.friendUsername}>@{friendship.friend?.username}</Text>
+              <UserName
+                profile={friendship.friend}
+                showHandle
+                displayNameStyle={styles.friendName}
+                handleStyle={styles.friendUsername}
+              />
             </View>
           </View>
         ))
@@ -179,8 +183,12 @@ export default function FriendsScreen() {
                 size={48}
               />
               <View style={styles.friendInfo}>
-                <Text style={styles.friendName}>{user.displayName}</Text>
-                <Text style={styles.friendUsername}>@{user.username}</Text>
+                <UserName
+                  profile={user}
+                  showHandle
+                  displayNameStyle={styles.friendName}
+                  handleStyle={styles.friendUsername}
+                />
               </View>
               <Button
                 title="Add"
@@ -207,8 +215,12 @@ export default function FriendsScreen() {
                 size={48}
               />
               <View style={styles.friendInfo}>
-                <Text style={styles.friendName}>{request.sender?.displayName}</Text>
-                <Text style={styles.friendUsername}>@{request.sender?.username}</Text>
+                <UserName
+                  profile={request.sender}
+                  showHandle
+                  displayNameStyle={styles.friendName}
+                  handleStyle={styles.friendUsername}
+                />
               </View>
               <View style={styles.requestActions}>
                 <Pressable
@@ -240,8 +252,12 @@ export default function FriendsScreen() {
                 size={48}
               />
               <View style={styles.friendInfo}>
-                <Text style={styles.friendName}>{request.receiver?.displayName}</Text>
-                <Text style={styles.friendUsername}>@{request.receiver?.username}</Text>
+                <UserName
+                  profile={request.receiver}
+                  showHandle
+                  displayNameStyle={styles.friendName}
+                  handleStyle={styles.friendUsername}
+                />
               </View>
               <Text style={styles.pendingText}>Pending</Text>
             </View>

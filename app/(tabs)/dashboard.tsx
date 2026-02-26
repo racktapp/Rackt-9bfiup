@@ -568,7 +568,7 @@ export default function DashboardScreen() {
               <Text style={styles.statLabel}>Losses</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{stats.winRate}%</Text>
+              <Text style={styles.statValue}>{stats.winRate}<Text style={styles.percentSymbol}>%</Text></Text>
               <Text style={styles.statLabel}>Win Rate</Text>
             </View>
             <View style={styles.statItem}>
@@ -994,6 +994,11 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.bold,
     color: Colors.primary,
   },
+  percentSymbol: {
+    fontSize: 20,
+    fontWeight: Typography.weights.bold,
+    color: Colors.primary,
+  },
   statLabel: {
     fontSize: Typography.sizes.xs,
     color: Colors.textMuted,
@@ -1050,7 +1055,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success,
   },
   resultLoss: {
-    backgroundColor: Colors.warning,
+    backgroundColor: Colors.danger,
   },
   resultBadgeText: {
     fontSize: Typography.sizes.base,

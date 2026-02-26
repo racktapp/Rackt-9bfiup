@@ -9,7 +9,7 @@ import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
 import { UserAvatar, UserName, Button, LoadingSpinner } from '@/components';
 import { SettingsRow, SettingsSection } from '@/components/settings';
 import { getSupabaseClient } from '@/template';
-import { storageService } from '@/services/storage';
+
 import { userService } from '@/services/user';
 import * as ExpoApplication from 'expo-application';
 
@@ -22,7 +22,7 @@ export default function SettingsScreen() {
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+
 
   useEffect(() => {
     loadUserData();
@@ -42,22 +42,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleChangePhoto = async () => {
-    if (!user?.id) return;
 
-    setUploading(true);
-    try {
-      const avatarUrl = await storageService.uploadAvatar(user.id);
-      if (avatarUrl) {
-        showAlert('Success', 'Photo updated successfully');
-        await loadUserData();
-      }
-    } catch (err: any) {
-      showAlert('Error', err.message || 'Failed to upload photo');
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const handleLogout = async () => {
     Alert.alert(
@@ -173,13 +158,7 @@ export default function SettingsScreen() {
               handleStyle={styles.profileUsername}
             />
           </View>
-          <Button
-            title={uploading ? 'Uploading...' : 'Change Photo'}
-            variant="outline"
-            size="small"
-            onPress={handleChangePhoto}
-            disabled={uploading}
-          />
+
         </View>
 
         {/* Account & Profile */}

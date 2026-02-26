@@ -19,7 +19,6 @@ export default function EmailAuthScreen() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -69,33 +68,7 @@ export default function EmailAuthScreen() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setError(null);
-    setGoogleLoading(true);
 
-    try {
-      const { error: googleError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window?.location?.origin || undefined,
-        },
-      });
-
-      if (googleError) {
-        console.error('Google Sign In Error:', googleError);
-        showAlert('Error', googleError.message || 'Failed to sign in with Google');
-        setGoogleLoading(false);
-        return;
-      }
-
-      // OAuth window will handle the rest
-      // On success, user will be redirected back and session will be established
-    } catch (err: any) {
-      console.error('Google sign in error:', err);
-      showAlert('Error', err.message || 'Failed to sign in with Google');
-      setGoogleLoading(false);
-    }
-  };
 
   return (
     <KeyboardAvoidingView
@@ -115,30 +88,6 @@ export default function EmailAuthScreen() {
         </View>
 
         <View style={styles.form}>
-          {/* Google Sign In Button */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.googleButton,
-              pressed && styles.googleButtonPressed,
-              googleLoading && styles.googleButtonDisabled,
-            ]}
-            onPress={handleGoogleSignIn}
-            disabled={googleLoading || loading}
-          >
-            <MaterialIcons name="account-circle" size={24} color={Colors.textPrimary} />
-            <Text style={styles.googleButtonText}>
-              {googleLoading ? 'Connecting...' : 'Continue with Google'}
-            </Text>
-          </Pressable>
-
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Email OTP Form */}
           <Input
             label="Email Address"
             value={email}
@@ -159,7 +108,7 @@ export default function EmailAuthScreen() {
             title={loading ? 'Sending...' : 'Send Code'}
             onPress={handleSendCode}
             fullWidth
-            disabled={loading || googleLoading}
+            disabled={loading}
           />
 
           <Text style={styles.helperText}>
@@ -215,44 +164,5 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     textAlign: 'center',
   },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.surface,
-    borderWidth: 2,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.lg,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-  },
-  googleButtonPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.98 }],
-  },
-  googleButtonDisabled: {
-    opacity: 0.5,
-  },
-  googleButtonText: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textPrimary,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    marginVertical: Spacing.sm,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.border,
-  },
-  dividerText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
-    fontWeight: Typography.weights.medium,
-  },
+
 });

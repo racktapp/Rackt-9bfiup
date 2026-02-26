@@ -86,14 +86,14 @@ export const userService = {
         created_at,
         group_id,
         metadata,
-        user:user_id (id, username, display_name),
+        user:user_id (id, username, display_name, initials, avatar_url),
         group:group_id (id, name),
         match:match_id (
           id,
           sport,
           format,
           winner_team,
-          players:match_players(user:user_id(id, username, display_name), team)
+          players:match_players(user:user_id(id, username, display_name, initials, avatar_url), team)
         )
       `)
       .or(filterQuery)

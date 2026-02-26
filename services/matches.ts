@@ -72,7 +72,7 @@ export const matchesService = {
           id,
           user_id,
           team,
-          user:user_id (id, username, display_name, email)
+          user:user_id (id, username, display_name, email, initials, avatar_url)
         ),
         sets:match_sets(
           id,
@@ -122,7 +122,7 @@ export const matchesService = {
         players:match_players(
           id,
           team,
-          user:user_id (id, username, display_name, email)
+          user:user_id (id, username, display_name, email, initials, avatar_url)
         )
       `)
       .eq('group_id', groupId)
@@ -162,7 +162,7 @@ export const matchesService = {
     // Get group members
     const { data: members } = await supabase
       .from('group_members')
-      .select('user_id, user:user_id(id, username, display_name)')
+      .select('user_id, user:user_id(id, username, display_name, email, initials, avatar_url)')
       .eq('group_id', groupId);
 
     if (!members) return [];

@@ -5,7 +5,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AlertProvider } from '@/template';
 import { initAdMob } from '@/utils/admob';
 import { Colors } from '@/constants/theme';
-import { StartupDiagnosticsPanel } from '@/components/StartupDiagnosticsPanel';
 import { StartupErrorScreen } from '@/components/StartupErrorScreen';
 import { logStartup, logStartupError } from '@/utils/startupDiagnostics';
 
@@ -14,7 +13,6 @@ function LoadingScreen() {
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color={Colors.primary} />
       <Text style={styles.loadingText}>Loading…</Text>
-      <StartupDiagnosticsPanel />
     </View>
   );
 }
@@ -33,7 +31,6 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
         onRetry={retry}
         onReload={() => DevSettings.reload()}
       />
-      <StartupDiagnosticsPanel />
     </View>
   );
 }
@@ -80,7 +77,6 @@ export default function RootLayout() {
           onRetry={boot}
           onReload={() => DevSettings.reload()}
         />
-        <StartupDiagnosticsPanel />
       </View>
     );
   }
@@ -113,7 +109,6 @@ export default function RootLayout() {
           <Stack.Screen name="tournaments/match-score" />
           <Stack.Screen name="tournaments/americano-points" />
         </Stack>
-        <StartupDiagnosticsPanel />
       </SafeAreaProvider>
     </AlertProvider>
   );

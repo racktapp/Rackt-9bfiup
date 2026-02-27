@@ -244,12 +244,12 @@ export default function SettingsScreen() {
           <SettingsRow
             icon="description"
             title="Terms of Service"
-            onPress={() => Linking.openURL('https://rackt.app/terms')}
+            onPress={() => Linking.openURL('https://racktapp.com/terms')}
           />
           <SettingsRow
             icon="privacy-tip"
             title="Privacy Policy"
-            onPress={() => Linking.openURL('https://rackt.app/privacy')}
+            onPress={() => Linking.openURL('https://racktapp.com/privacy')}
           />
           <SettingsRow
             icon="info"

@@ -33,7 +33,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textMuted,
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: '500',
         },
       }}
@@ -78,6 +78,9 @@ export default function TabLayout() {
         name="leaderboards"
         options={{
           title: 'Leaderboards',
+          tabBarLabelStyle: {
+            fontSize: 8,
+          },
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="trophy" size={size} color={color} />
           ),

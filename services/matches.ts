@@ -38,7 +38,7 @@ async function invokeFunction(name: string, body: any) {
 
 export const matchesService = {
   async createMatch(data: {
-    groupId: string;
+    groupId?: string | null; // Now optional for standalone 1v1 matches
     sport: Sport;
     format: MatchFormat;
     type: MatchType;
@@ -48,7 +48,7 @@ export const matchesService = {
     winnerTeam: 'A' | 'B';
   }) {
     return await invokeFunction('create-match', {
-      groupId: data.groupId,
+      groupId: data.groupId || null,
       sport: data.sport,
       format: data.format,
       type: data.type,

@@ -539,6 +539,13 @@ export default function DashboardScreen() {
         <View style={styles.actionsRow}>
           <Pressable
             style={styles.actionButton}
+            onPress={() => router.push('/quick-1v1')}
+          >
+            <MaterialIcons name="sports-tennis" size={32} color={Colors.primary} />
+            <Text style={styles.actionText}>Quick 1v1</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
             onPress={() => router.push('/(tabs)/add-match')}
           >
             <MaterialIcons name="add-circle" size={32} color={Colors.primary} />
@@ -955,10 +962,12 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.md,
   },
   actionButton: {
-    flex: 1,
+    flexBasis: '31%',
+    flexGrow: 1,
     backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
     borderWidth: 1,

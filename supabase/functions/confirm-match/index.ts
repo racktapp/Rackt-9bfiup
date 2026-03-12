@@ -347,10 +347,8 @@ Deno.serve(async (req) => {
       console.log('[Confirm Match] Rating already applied, skipping');
     }
 
-    // Step 8: Create feed event (only if not already created)
-    if (!match.group_id) {
-      console.error('[Confirm Match] Cannot create feed event: missing group_id');
-    } else {
+    // Step 8: Create feed event (only for group matches)
+    if (match.group_id) {
       // Check if feed event already exists for this match confirmation
       const { data: existingFeed } = await supabaseAdmin
         .from('feed_events')
@@ -375,6 +373,8 @@ Deno.serve(async (req) => {
       } else {
         console.log('[Confirm Match] Feed event already exists, skipping');
       }
+    } else {
+      console.log('[Confirm Match] Standalone match - skipping feed event');
     }
 
     console.log('[Confirm Match] Complete - returning success');

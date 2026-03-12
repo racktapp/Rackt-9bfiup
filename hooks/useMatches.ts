@@ -3,7 +3,7 @@ import { Sport, MatchFormat, MatchType } from '@/constants/config';
 
 export function useMatches() {
   const createMatch = async (data: {
-    groupId: string;
+    groupId?: string | null; // Optional for standalone 1v1 matches
     sport: Sport;
     format: MatchFormat;
     type: MatchType;

@@ -26,33 +26,36 @@ Deno.serve(async (req) => {
 
     const { groupId, sport, format, type, teamA, teamB, sets, winnerTeam } = await req.json();
 
-    if (!groupId || !sport || !format || !type || !teamA || !teamB || !sets || !winnerTeam) {
+    // groupId is now optional for standalone 1v1 matches
+    if (!sport || !format || !type || !teamA || !teamB || !sets || !winnerTeam) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Verify user is member of group
-    const { data: membership } = await supabaseClient
-      .from('group_members')
-      .select('id')
-      .eq('group_id', groupId)
-      .eq('user_id', user.id)
-      .single();
+    // If groupId is provided, verify user is member
+    if (groupId) {
+      const { data: membership } = await supabaseClient
+        .from('group_members')
+        .select('id')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
 
-    if (!membership) {
-      return new Response(JSON.stringify({ error: 'Not a member of this group' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      if (!membership) {
+        return new Response(JSON.stringify({ error: 'Not a member of this group' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
-    // Create match
+    // Create match (group_id can be null for standalone matches)
     const { data: match, error: matchError } = await supabaseClient
       .from('matches')
       .insert({
-        group_id: groupId,
+        group_id: groupId || null,
         sport,
         format,
         type,

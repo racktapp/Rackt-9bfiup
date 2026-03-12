@@ -10,7 +10,7 @@ export interface PosterData {
   sport: Sport;
   format: MatchFormat;
   matchType: MatchType;
-  groupName: string;
+  groupName?: string | null; // Optional for standalone 1v1 matches
   teamAName: string;
   teamBName: string;
   teamAHandle?: string;

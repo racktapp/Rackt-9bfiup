@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -26,6 +26,10 @@ export default function TournamentsHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [respondingToInvite, setRespondingToInvite] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [sportFilter, setSportFilter] = useState<'all' | 'tennis' | 'padel'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'americano' | 'normal'>('all');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
 
   useEffect(() => {
     loadUserId();
@@ -234,6 +238,39 @@ export default function TournamentsHomeScreen() {
     </View>
   );
 
+  // Filter and sort tournaments
+  const allTournaments = useMemo(() => {
+    let combined = [...activeTournaments, ...completedTournaments];
+
+    // Apply status filter
+    if (activeFilter === 'active') {
+      combined = combined.filter(t => 
+        t.state === 'draft' || t.state === 'inviting' || t.state === 'locked' || t.state === 'in_progress'
+      );
+    } else if (activeFilter === 'completed') {
+      combined = combined.filter(t => t.state === 'completed');
+    }
+
+    // Apply sport filter
+    if (sportFilter !== 'all') {
+      combined = combined.filter(t => t.sport === sportFilter);
+    }
+
+    // Apply type filter
+    if (typeFilter !== 'all') {
+      combined = combined.filter(t => t.type === typeFilter);
+    }
+
+    // Apply sorting
+    combined.sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+    });
+
+    return combined;
+  }, [activeTournaments, completedTournaments, activeFilter, sportFilter, typeFilter, sortOrder]);
+
   const renderTournamentCard = (tournament: Tournament) => (
     <Pressable
       key={tournament.id}
@@ -317,6 +354,121 @@ export default function TournamentsHomeScreen() {
           />
         }
       >
+        {/* Filters */}
+        <View style={styles.filtersSection}>
+          <View style={styles.filterRow}>
+            <Text style={styles.filterLabel}>Status</Text>
+            <View style={styles.filterChips}>
+              <Pressable
+                style={[styles.filterChip, activeFilter === 'all' && styles.filterChipActive]}
+                onPress={() => setActiveFilter('all')}
+              >
+                <Text style={[styles.filterChipText, activeFilter === 'all' && styles.filterChipTextActive]}>
+                  All
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.filterChip, activeFilter === 'active' && styles.filterChipActive]}
+                onPress={() => setActiveFilter('active')}
+              >
+                <Text style={[styles.filterChipText, activeFilter === 'active' && styles.filterChipTextActive]}>
+                  Active
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.filterChip, activeFilter === 'completed' && styles.filterChipActive]}
+                onPress={() => setActiveFilter('completed')}
+              >
+                <Text style={[styles.filterChipText, activeFilter === 'completed' && styles.filterChipTextActive]}>
+                  Completed
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.filterRow}>
+            <Text style={styles.filterLabel}>Sport</Text>
+            <View style={styles.filterChips}>
+              <Pressable
+                style={[styles.filterChip, sportFilter === 'all' && styles.filterChipActive]}
+                onPress={() => setSportFilter('all')}
+              >
+                <Text style={[styles.filterChipText, sportFilter === 'all' && styles.filterChipTextActive]}>
+                  All
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.filterChip, sportFilter === 'tennis' && styles.filterChipActive]}
+                onPress={() => setSportFilter('tennis')}
+              >
+                <Text style={[styles.filterChipText, sportFilter === 'tennis' && styles.filterChipTextActive]}>
+                  Tennis
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.filterChip, sportFilter === 'padel' && styles.filterChipActive]}
+                onPress={() => setSportFilter('padel')}
+              >
+                <Text style={[styles.filterChipText, sportFilter === 'padel' && styles.filterChipTextActive]}>
+                  Padel
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.filterRow}>
+            <Text style={styles.filterLabel}>Type</Text>
+            <View style={styles.filterChips}>
+              <Pressable
+                style={[styles.filterChip, typeFilter === 'all' && styles.filterChipActive]}
+                onPress={() => setTypeFilter('all')}
+              >
+                <Text style={[styles.filterChipText, typeFilter === 'all' && styles.filterChipTextActive]}>
+                  All
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.filterChip, typeFilter === 'americano' && styles.filterChipActive]}
+                onPress={() => setTypeFilter('americano')}
+              >
+                <Text style={[styles.filterChipText, typeFilter === 'americano' && styles.filterChipTextActive]}>
+                  Americano
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.filterChip, typeFilter === 'normal' && styles.filterChipActive]}
+                onPress={() => setTypeFilter('normal')}
+              >
+                <Text style={[styles.filterChipText, typeFilter === 'normal' && styles.filterChipTextActive]}>
+                  Normal
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.filterRow}>
+            <Text style={styles.filterLabel}>Sort</Text>
+            <View style={styles.filterChips}>
+              <Pressable
+                style={[styles.filterChip, sortOrder === 'newest' && styles.filterChipActive]}
+                onPress={() => setSortOrder('newest')}
+              >
+                <Text style={[styles.filterChipText, sortOrder === 'newest' && styles.filterChipTextActive]}>
+                  Newest
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.filterChip, sortOrder === 'oldest' && styles.filterChipActive]}
+                onPress={() => setSortOrder('oldest')}
+              >
+                <Text style={[styles.filterChipText, sortOrder === 'oldest' && styles.filterChipTextActive]}>
+                  Oldest
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+
         {/* Pending Invites */}
         {pendingInvites.length > 0 && (
           <View style={styles.section}>
@@ -327,28 +479,20 @@ export default function TournamentsHomeScreen() {
           </View>
         )}
 
-        {/* Active Tournaments */}
-        {activeTournaments.length > 0 && (
+        {/* Tournaments List */}
+        {allTournaments.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Active</Text>
+            <Text style={styles.sectionTitle}>
+              {allTournaments.length} Tournament{allTournaments.length !== 1 ? 's' : ''}
+            </Text>
             <View style={styles.tournamentsList}>
-              {activeTournaments.map(renderTournamentCard)}
-            </View>
-          </View>
-        )}
-
-        {/* Completed Tournaments */}
-        {completedTournaments.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Completed</Text>
-            <View style={styles.tournamentsList}>
-              {completedTournaments.map(renderTournamentCard)}
+              {allTournaments.map(renderTournamentCard)}
             </View>
           </View>
         )}
 
         {/* Empty State */}
-        {activeTournaments.length === 0 && completedTournaments.length === 0 && pendingInvites.length === 0 && (
+        {allTournaments.length === 0 && pendingInvites.length === 0 && (
           <EmptyState
             icon="🏆"
             title="No Tournaments Yet"
@@ -557,5 +701,48 @@ const styles = StyleSheet.create({
   participantsText: {
     fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
+  },
+  filtersSection: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+    gap: Spacing.md,
+  },
+  filterRow: {
+    gap: Spacing.sm,
+  },
+  filterLabel: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  filterChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+  },
+  filterChip: {
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  filterChipText: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+  },
+  filterChipTextActive: {
+    color: Colors.textPrimary,
+    fontWeight: Typography.weights.semibold,
   },
 });

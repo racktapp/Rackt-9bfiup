@@ -539,13 +539,6 @@ export default function DashboardScreen() {
         <View style={styles.actionsRow}>
           <Pressable
             style={styles.actionButton}
-            onPress={() => router.push('/quick-1v1')}
-          >
-            <MaterialIcons name="sports-tennis" size={32} color={Colors.primary} />
-            <Text style={styles.actionText}>Quick 1v1</Text>
-          </Pressable>
-          <Pressable
-            style={styles.actionButton}
             onPress={() => router.push('/(tabs)/add-match')}
           >
             <MaterialIcons name="add-circle" size={32} color={Colors.primary} />
@@ -557,6 +550,16 @@ export default function DashboardScreen() {
           >
             <MaterialIcons name="group-add" size={32} color={Colors.primary} />
             <Text style={styles.actionText}>Create Group</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              setActiveTab('tournaments');
+              setTimeout(() => router.push('/tournaments/create'), 100);
+            }}
+          >
+            <MaterialIcons name="emoji-events" size={32} color={Colors.primary} />
+            <Text style={styles.actionText}>New Tournament</Text>
           </Pressable>
         </View>
       </View>

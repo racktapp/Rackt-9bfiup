@@ -102,7 +102,6 @@ export default function RootLayout() {
           <Stack.Screen name="settings/blocked-users" />
           <Stack.Screen name="settings/how-ratings-work" />
           <Stack.Screen name="settings/appearance" />
-          <Stack.Screen name="quick-1v1" />
           <Stack.Screen name="tournaments/index" />
           <Stack.Screen name="tournaments/create" />
           <Stack.Screen name="tournaments/invite" />

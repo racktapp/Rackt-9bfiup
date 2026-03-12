@@ -12,6 +12,8 @@ import { useGroups } from '@/hooks/useGroups';
 import { useMatches } from '@/hooks/useMatches';
 import { Group, GroupMember } from '@/types';
 import { getSupabaseClient } from '@/template';
+import { friendsService } from '@/services/friends';
+import { UserAvatar, UserName } from '@/components';
 
 const supabase = getSupabaseClient();
 
@@ -22,11 +24,15 @@ export default function AddMatchScreen() {
   const { createMatch } = useMatches();
 
   const [userId, setUserId] = useState<string | null>(null);
+  const [matchMode, setMatchMode] = useState<'group' | '1v1'>('group');
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
+  const [friends, setFriends] = useState<any[]>([]);
+  const [selectedOpponent, setSelectedOpponent] = useState<string | null>(null);
   const [isLoadingGroups, setIsLoadingGroups] = useState(true);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [isLoadingFriends, setIsLoadingFriends] = useState(false);
   const [sport, setSport] = useState<Sport>('tennis');
   const [format, setFormat] = useState<MatchFormat>('singles');
   const [type, setType] = useState<MatchType>('competitive');
@@ -43,8 +49,11 @@ export default function AddMatchScreen() {
   useEffect(() => {
     if (userId) {
       loadGroups();
+      if (matchMode === '1v1') {
+        loadFriends();
+      }
     }
-  }, [userId]);
+  }, [userId, matchMode]);
 
   useEffect(() => {
     if (selectedGroup) {
@@ -66,6 +75,19 @@ export default function AddMatchScreen() {
       console.error('Error loading groups:', err);
     } finally {
       setIsLoadingGroups(false);
+    }
+  };
+
+  const loadFriends = async () => {
+    if (!userId) return;
+    setIsLoadingFriends(true);
+    try {
+      const data = await friendsService.getFriends(userId);
+      setFriends(data);
+    } catch (err) {
+      console.error('Error loading friends:', err);
+    } finally {
+      setIsLoadingFriends(false);
     }
   };
 
@@ -149,11 +171,19 @@ export default function AddMatchScreen() {
   }, [sets]);
 
   const validateMatch = () => {
-    if (!selectedGroup) return 'Please select a group';
+    if (matchMode === 'group' && !selectedGroup) {
+      return 'Please select a group';
+    }
+
+    if (matchMode === '1v1' && !selectedOpponent) {
+      return 'Please select an opponent';
+    }
     
-    const requiredPlayers = format === 'singles' ? 1 : 2;
-    if (teamA.length !== requiredPlayers || teamB.length !== requiredPlayers) {
-      return `Each team needs ${requiredPlayers} player${requiredPlayers > 1 ? 's' : ''}`;
+    if (matchMode === 'group') {
+      const requiredPlayers = format === 'singles' ? 1 : 2;
+      if (teamA.length !== requiredPlayers || teamB.length !== requiredPlayers) {
+        return `Each team needs ${requiredPlayers} player${requiredPlayers > 1 ? 's' : ''}`;
+      }
     }
 
     if (!matchState.canSubmit) {
@@ -170,7 +200,7 @@ export default function AddMatchScreen() {
       return;
     }
 
-    if (!userId || !selectedGroup) return;
+    if (!userId) return;
 
     setSubmitting(true);
     setError(null);
@@ -182,14 +212,23 @@ export default function AddMatchScreen() {
         return;
       }
 
+      let finalTeamA = teamA;
+      let finalTeamB = teamB;
+
+      // For 1v1 mode, set teams automatically
+      if (matchMode === '1v1' && selectedOpponent) {
+        finalTeamA = [userId];
+        finalTeamB = [selectedOpponent];
+      }
+
       const match = await createMatch({
-        groupId: selectedGroup,
+        groupId: matchMode === 'group' ? selectedGroup : null,
         sport,
-        format,
+        format: matchMode === '1v1' ? 'singles' : format,
         type,
         createdBy: userId,
-        teamA,
-        teamB,
+        teamA: finalTeamA,
+        teamB: finalTeamB,
         sets,
         winnerTeam: matchState.winner,
       });
@@ -224,27 +263,131 @@ export default function AddMatchScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Group Selection */}
+        {/* Match Mode Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Group</Text>
-          {isLoadingGroups ? (
-            <Text style={styles.helperText}>Loading groups...</Text>
-          ) : (
-            <View style={styles.optionsRow}>
-            {groups.map(group => (
-              <Pressable
-                key={group.id}
-                style={[styles.chip, selectedGroup === group.id && styles.chipSelected]}
-                onPress={() => setSelectedGroup(group.id)}
-              >
-                <Text style={[styles.chipText, selectedGroup === group.id && styles.chipTextSelected]}>
-                  {group.name}
-                </Text>
-              </Pressable>
-            ))}
-            </View>
-          )}
+          <Text style={styles.sectionLabel}>Match Type</Text>
+          <View style={styles.modeCards}>
+            <Pressable
+              style={[styles.modeCard, matchMode === 'group' && styles.modeCardSelected]}
+              onPress={() => {
+                setMatchMode('group');
+                setSelectedOpponent(null);
+                setTeamA([]);
+                setTeamB([]);
+              }}
+            >
+              <MaterialIcons 
+                name="group" 
+                size={24} 
+                color={matchMode === 'group' ? Colors.primary : Colors.textMuted} 
+              />
+              <Text style={[styles.modeCardTitle, matchMode === 'group' && styles.modeCardTitleSelected]}>
+                Group Match
+              </Text>
+              <Text style={[styles.modeCardHelper, matchMode === 'group' && styles.modeCardHelperSelected]}>
+                Log match within a group
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.modeCard, matchMode === '1v1' && styles.modeCardSelected]}
+              onPress={() => {
+                setMatchMode('1v1');
+                setSelectedGroup(null);
+                setTeamA([]);
+                setTeamB([]);
+                if (userId && friends.length === 0) {
+                  loadFriends();
+                }
+              }}
+            >
+              <MaterialIcons 
+                name="sports-tennis" 
+                size={24} 
+                color={matchMode === '1v1' ? Colors.primary : Colors.textMuted} 
+              />
+              <Text style={[styles.modeCardTitle, matchMode === '1v1' && styles.modeCardTitleSelected]}>
+                Quick 1v1
+              </Text>
+              <Text style={[styles.modeCardHelper, matchMode === '1v1' && styles.modeCardHelperSelected]}>
+                Play with a friend
+              </Text>
+            </Pressable>
+          </View>
         </View>
+
+        {/* Group Selection (only for group mode) */}
+        {matchMode === 'group' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Group</Text>
+            {isLoadingGroups ? (
+              <Text style={styles.helperText}>Loading groups...</Text>
+            ) : groups.length === 0 ? (
+              <Text style={styles.helperText}>No groups yet. Create one first.</Text>
+            ) : (
+              <View style={styles.optionsRow}>
+                {groups.map(group => (
+                  <Pressable
+                    key={group.id}
+                    style={[styles.chip, selectedGroup === group.id && styles.chipSelected]}
+                    onPress={() => setSelectedGroup(group.id)}
+                  >
+                    <Text style={[styles.chipText, selectedGroup === group.id && styles.chipTextSelected]}>
+                      {group.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Opponent Selection (only for 1v1 mode) */}
+        {matchMode === '1v1' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Select Opponent</Text>
+            {isLoadingFriends ? (
+              <View style={styles.loadingContainer}>
+                <LoadingSpinner size={24} />
+                <Text style={styles.helperText}>Loading friends...</Text>
+              </View>
+            ) : friends.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <MaterialIcons name="people-outline" size={48} color={Colors.textMuted} />
+                <Text style={styles.emptyText}>No friends yet</Text>
+                <Text style={styles.helperText}>Add friends to play 1v1 matches</Text>
+              </View>
+            ) : (
+              <View style={styles.friendsList}>
+                {friends.map(friendship => (
+                  <Pressable
+                    key={friendship.id}
+                    style={[
+                      styles.friendCard,
+                      selectedOpponent === friendship.friend.id && styles.friendCardSelected,
+                    ]}
+                    onPress={() => setSelectedOpponent(friendship.friend.id)}
+                  >
+                    <UserAvatar
+                      name={friendship.friend.displayName || friendship.friend.username}
+                      avatarUrl={friendship.friend.avatarUrl}
+                      size={40}
+                    />
+                    <View style={styles.friendInfo}>
+                      <UserName
+                        profile={friendship.friend}
+                        displayNameStyle={styles.friendName}
+                        handleStyle={styles.friendHandle}
+                      />
+                    </View>
+                    {selectedOpponent === friendship.friend.id && (
+                      <MaterialIcons name="check-circle" size={24} color={Colors.primary} />
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Sport */}
         <View style={styles.section}>
@@ -274,28 +417,29 @@ export default function AddMatchScreen() {
           {/* This closing tag was misplaced and caused the error. It should not be here. */}
         </View>
 
-        {/* Format */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Format</Text>
-          <View style={styles.optionsRow}>
-            {Config.matchFormats.map(f => (
-              <Pressable
-                key={f}
-                style={[styles.chip, format === f && styles.chipSelected]}
-                onPress={() => {
-                  setFormat(f);
-                  setTeamA([]);
-                  setTeamB([]);
-                }}
-              >
-                <Text style={[styles.chipText, format === f && styles.chipTextSelected]}>
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
-                </Text>
-              </Pressable>
-            ))}
+        {/* Format (only for group mode) */}
+        {matchMode === 'group' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Format</Text>
+            <View style={styles.optionsRow}>
+              {Config.matchFormats.map(f => (
+                <Pressable
+                  key={f}
+                  style={[styles.chip, format === f && styles.chipSelected]}
+                  onPress={() => {
+                    setFormat(f);
+                    setTeamA([]);
+                    setTeamB([]);
+                  }}
+                >
+                  <Text style={[styles.chipText, format === f && styles.chipTextSelected]}>
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
-          {/* This closing tag was misplaced and caused the error. It should not be here. */}
-        </View>
+          </View>
+        )}
 
         {/* Type */}
         <View style={styles.section}>
@@ -329,8 +473,8 @@ export default function AddMatchScreen() {
           )}
         </View>
 
-        {/* Players */}
-        {selectedGroup && !isLoadingMembers && members.length > 0 && (
+        {/* Players (only for group mode) */}
+        {matchMode === 'group' && selectedGroup && !isLoadingMembers && members.length > 0 && (
           <>
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Team A</Text>
@@ -381,29 +525,38 @@ export default function AddMatchScreen() {
         )}
 
         {/* Score */}
-        {teamA.length > 0 && teamB.length > 0 && (
+        {((matchMode === 'group' && teamA.length > 0 && teamB.length > 0) || (matchMode === '1v1' && selectedOpponent)) && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Score</Text>
             
             {/* Team Names Header */}
             <View style={styles.teamsHeader}>
               <View style={styles.teamHeaderSide}>
-                <Text style={styles.teamLabel}>Team A</Text>
-                <Text style={styles.teamPlayers}>
-                  {teamA.map(id => {
-                    const member = members.find(m => m.userId === id);
-                    return member?.user?.displayName?.split(' ')[0] || 'Player';
-                  }).join(' / ')}
-                </Text>
+                <Text style={styles.teamLabel}>{matchMode === '1v1' ? 'You' : 'Team A'}</Text>
+                {matchMode === 'group' && (
+                  <Text style={styles.teamPlayers}>
+                    {teamA.map(id => {
+                      const member = members.find(m => m.userId === id);
+                      return member?.user?.displayName?.split(' ')[0] || 'Player';
+                    }).join(' / ')}
+                  </Text>
+                )}
               </View>
               <View style={styles.teamHeaderSide}>
-                <Text style={styles.teamLabel}>Team B</Text>
-                <Text style={styles.teamPlayers}>
-                  {teamB.map(id => {
-                    const member = members.find(m => m.userId === id);
-                    return member?.user?.displayName?.split(' ')[0] || 'Player';
-                  }).join(' / ')}
-                </Text>
+                <Text style={styles.teamLabel}>{matchMode === '1v1' ? 'Opponent' : 'Team B'}</Text>
+                {matchMode === '1v1' && selectedOpponent && (
+                  <Text style={styles.teamPlayers}>
+                    {friends.find(f => f.friend.id === selectedOpponent)?.friend.displayName?.split(' ')[0] || 'Opponent'}
+                  </Text>
+                )}
+                {matchMode === 'group' && (
+                  <Text style={styles.teamPlayers}>
+                    {teamB.map(id => {
+                      const member = members.find(m => m.userId === id);
+                      return member?.user?.displayName?.split(' ')[0] || 'Player';
+                    }).join(' / ')}
+                  </Text>
+                )}
               </View>
             </View>
 
@@ -475,7 +628,7 @@ export default function AddMatchScreen() {
               <View style={styles.matchSummary}>
                 <Text style={styles.matchSummaryLabel}>Current Result:</Text>
                 <Text style={styles.matchSummaryValue}>
-                  Team A {matchState.setsWonA} – {matchState.setsWonB} Team B
+                  {matchMode === '1v1' ? 'You' : 'Team A'} {matchState.setsWonA} – {matchState.setsWonB} {matchMode === '1v1' ? 'Opponent' : 'Team B'}
                 </Text>
               </View>
             )}
@@ -765,5 +918,86 @@ const styles = StyleSheet.create({
     color: Colors.danger,
     fontSize: Typography.sizes.sm,
     textAlign: 'center',
+  },
+  modeCards: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  modeCard: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  modeCardSelected: {
+    backgroundColor: Colors.surfaceElevated,
+    borderColor: Colors.primary,
+    borderWidth: 2,
+  },
+  modeCardTitle: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  modeCardTitleSelected: {
+    color: Colors.primary,
+  },
+  modeCardHelper: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+    textAlign: 'center',
+  },
+  modeCardHelperSelected: {
+    color: Colors.textMuted,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.lg,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xxl,
+  },
+  emptyText: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textMuted,
+  },
+  friendsList: {
+    gap: Spacing.sm,
+  },
+  friendCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+  },
+  friendCardSelected: {
+    backgroundColor: Colors.surfaceElevated,
+    borderColor: Colors.primary,
+    borderWidth: 2,
+  },
+  friendInfo: {
+    flex: 1,
+  },
+  friendName: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  friendHandle: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
   },
 });

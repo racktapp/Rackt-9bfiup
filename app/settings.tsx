@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Linking } from 'react-native';
 import { Image } from 'expo-image';
@@ -204,16 +205,6 @@ export default function SettingsScreen() {
             title="Privacy Settings"
             subtitle="Profile visibility and who can add you"
             onPress={() => router.push('/settings/privacy' as any)}
-          />
-        </SettingsSection>
-
-        {/* Appearance */}
-        <SettingsSection title="Appearance">
-          <SettingsRow
-            icon="palette"
-            title="Theme"
-            subtitle="Choose app theme (System / Dark / Light)"
-            onPress={() => router.push('/settings/appearance' as any)}
           />
         </SettingsSection>
 

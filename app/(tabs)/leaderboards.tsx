@@ -33,7 +33,6 @@ export default function LeaderboardsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Head-to-head state
   const [friends, setFriends] = useState<any[]>([]);
   const [selectedOpponent, setSelectedOpponent] = useState<string | null>(null);
   const [showOpponentPicker, setShowOpponentPicker] = useState(false);
@@ -117,8 +116,7 @@ export default function LeaderboardsScreen() {
             winner_team,
             created_at,
             group_id,
-            sport,
-            match_sets(team_a_score, team_b_score)
+            sport
           )
         `)
         .eq('user_id', userId);
@@ -161,12 +159,9 @@ export default function LeaderboardsScreen() {
 
           return {
             matchId: match.id,
-            myTeam,
-            opponentTeam,
             iWon,
             opponentWon,
             createdAt: match.created_at,
-            sets: match.match_sets,
           };
         })
       );
@@ -212,7 +207,7 @@ export default function LeaderboardsScreen() {
         streakType,
         last5,
         totalMatches: filteredMatches.length,
-        recentMatches: sortedMatches.slice(0, 5),
+        recentMatches: sortedMatches.slice(0, 3),
       });
     } catch (err) {
       console.error('Error loading head-to-head stats:', err);
@@ -259,7 +254,7 @@ export default function LeaderboardsScreen() {
           <Pressable onPress={() => router.push('/(tabs)/dashboard')}>
             <Image
               source={require('@/assets/images/logo.png')}
-              style={styles.headerLogo}
+              style={styles.logo}
               contentFit="contain"
               transition={200}
             />
@@ -281,7 +276,7 @@ export default function LeaderboardsScreen() {
           <Pressable onPress={() => router.push('/(tabs)/dashboard')}>
             <Image
               source={require('@/assets/images/logo.png')}
-              style={styles.headerLogo}
+              style={styles.logo}
               contentFit="contain"
               transition={200}
             />
@@ -291,11 +286,7 @@ export default function LeaderboardsScreen() {
             <MaterialIcons name="settings" size={24} color={Colors.textPrimary} />
           </Pressable>
         </View>
-        <EmptyState
-          icon="🏆"
-          title="No Groups Yet"
-          subtitle="Join a group to view leaderboards"
-        />
+        <EmptyState icon="🏆" title="No Groups Yet" subtitle="Join a group to view leaderboards" />
       </View>
     );
   }
@@ -307,7 +298,7 @@ export default function LeaderboardsScreen() {
         <Pressable onPress={() => router.push('/(tabs)/dashboard')}>
           <Image
             source={require('@/assets/images/logo.png')}
-            style={styles.headerLogo}
+            style={styles.logo}
             contentFit="contain"
             transition={200}
           />
@@ -318,115 +309,102 @@ export default function LeaderboardsScreen() {
         </Pressable>
       </View>
 
-      {/* Tab Bar */}
-      <View style={styles.tabBar}>
-        <Pressable
-          style={[styles.tabButton, activeTab === 'group-ranking' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('group-ranking')}
-        >
-          <Text style={[styles.tabButtonText, activeTab === 'group-ranking' && styles.tabButtonTextActive]}>
-            Group Ranking
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tabButton, activeTab === 'head-to-head' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('head-to-head')}
-        >
-          <Text style={[styles.tabButtonText, activeTab === 'head-to-head' && styles.tabButtonTextActive]}>
-            Head-to-head
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* Controls */}
+      {/* Compact Controls */}
       <View style={styles.controls}>
-        {/* Group Selector */}
-        <View style={styles.controlSection}>
-          <Text style={styles.controlLabel}>Group</Text>
-          <View style={styles.controlPill}>
-            <Text style={styles.controlPillText} numberOfLines={1}>
-              {currentGroup?.name || 'Select Group'}
+        {/* Tabs */}
+        <View style={styles.tabs}>
+          <Pressable
+            style={[styles.tab, activeTab === 'group-ranking' && styles.tabActive]}
+            onPress={() => setActiveTab('group-ranking')}
+          >
+            <Text style={[styles.tabText, activeTab === 'group-ranking' && styles.tabTextActive]}>
+              Group Ranking
             </Text>
-          </View>
+          </Pressable>
+          <Pressable
+            style={[styles.tab, activeTab === 'head-to-head' && styles.tabActive]}
+            onPress={() => setActiveTab('head-to-head')}
+          >
+            <Text style={[styles.tabText, activeTab === 'head-to-head' && styles.tabTextActive]}>
+              Head-to-head
+            </Text>
+          </Pressable>
         </View>
 
-        {/* Opponent Selector (only for head-to-head) */}
-        {activeTab === 'head-to-head' && (
-          <View style={styles.controlSection}>
-            <Text style={styles.controlLabel}>Opponent</Text>
-            <Pressable
-              style={styles.playerSelector}
-              onPress={() => setShowOpponentPicker(true)}
-            >
+        {/* Selectors Row */}
+        <View style={styles.selectorsRow}>
+          <View style={styles.groupPill}>
+            <MaterialIcons name="group" size={14} color={Colors.textPrimary} />
+            <Text style={styles.groupText} numberOfLines={1}>
+              {currentGroup?.name || 'Group'}
+            </Text>
+          </View>
+          
+          {activeTab === 'head-to-head' && (
+            <Pressable style={styles.opponentPill} onPress={() => setShowOpponentPicker(true)}>
               {selectedFriend ? (
                 <>
                   <UserAvatar
                     name={selectedFriend.displayName || selectedFriend.username}
                     avatarUrl={selectedFriend.avatarUrl}
-                    size={28}
+                    size={20}
                   />
-                  <Text style={styles.playerSelectorText}>
+                  <Text style={styles.opponentText} numberOfLines={1}>
                     {selectedFriend.displayName || selectedFriend.username}
                   </Text>
                 </>
               ) : (
-                <Text style={styles.playerSelectorPlaceholder}>Choose player</Text>
+                <Text style={styles.opponentPlaceholder}>Choose player</Text>
               )}
-              <MaterialIcons name="arrow-drop-down" size={24} color={Colors.textMuted} />
+              <MaterialIcons name="arrow-drop-down" size={18} color={Colors.textMuted} />
+            </Pressable>
+          )}
+        </View>
+
+        {/* Mini Controls */}
+        <View style={styles.miniControls}>
+          <View style={styles.miniGroup}>
+            <Pressable
+              style={[styles.miniBtn, selectedSport === 'tennis' && styles.miniBtnActive]}
+              onPress={() => setSelectedSport('tennis')}
+            >
+              <Image
+                source={require('@/assets/icons/tennis_icon.png')}
+                style={[styles.miniIcon, selectedSport !== 'tennis' && styles.miniIconInactive]}
+                contentFit="contain"
+                transition={0}
+              />
+            </Pressable>
+            <Pressable
+              style={[styles.miniBtn, selectedSport === 'padel' && styles.miniBtnActive]}
+              onPress={() => setSelectedSport('padel')}
+            >
+              <Image
+                source={require('@/assets/icons/padel_icon.png')}
+                style={[styles.miniIcon, selectedSport !== 'padel' && styles.miniIconInactive]}
+                contentFit="contain"
+                transition={0}
+              />
             </Pressable>
           </View>
-        )}
 
-        {/* Sport & Period */}
-        <View style={styles.splitControls}>
-          <View style={[styles.controlSection, { flex: 1 }]}>
-            <Text style={styles.controlLabel}>Sport</Text>
-            <View style={styles.segmentedControl}>
-              <Pressable
-                style={[styles.segment, selectedSport === 'tennis' && styles.segmentActive]}
-                onPress={() => setSelectedSport('tennis')}
-              >
-                <Image
-                  source={require('@/assets/icons/tennis_icon.png')}
-                  style={[styles.sportIcon, selectedSport !== 'tennis' && styles.sportIconInactive]}
-                  contentFit="contain"
-                  transition={0}
-                />
-              </Pressable>
-              <Pressable
-                style={[styles.segment, selectedSport === 'padel' && styles.segmentActive]}
-                onPress={() => setSelectedSport('padel')}
-              >
-                <Image
-                  source={require('@/assets/icons/padel_icon.png')}
-                  style={[styles.sportIcon, selectedSport !== 'padel' && styles.sportIconInactive]}
-                  contentFit="contain"
-                  transition={0}
-                />
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={[styles.controlSection, { flex: 1 }]}>
-            <Text style={styles.controlLabel}>Time</Text>
-            <View style={styles.segmentedControl}>
-              <Pressable
-                style={[styles.segment, period === 'monthly' && styles.segmentActive]}
-                onPress={() => setPeriod('monthly')}
-              >
-                <Text style={[styles.segmentText, period === 'monthly' && styles.segmentTextActive]}>
-                  Month
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.segment, period === 'alltime' && styles.segmentActive]}
-                onPress={() => setPeriod('alltime')}
-              >
-                <Text style={[styles.segmentText, period === 'alltime' && styles.segmentTextActive]}>
-                  All
-                </Text>
-              </Pressable>
-            </View>
+          <View style={styles.miniGroup}>
+            <Pressable
+              style={[styles.miniBtn, period === 'monthly' && styles.miniBtnActive]}
+              onPress={() => setPeriod('monthly')}
+            >
+              <Text style={[styles.miniBtnText, period === 'monthly' && styles.miniBtnTextActive]}>
+                Month
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.miniBtn, period === 'alltime' && styles.miniBtnActive]}
+              onPress={() => setPeriod('alltime')}
+            >
+              <Text style={[styles.miniBtnText, period === 'alltime' && styles.miniBtnTextActive]}>
+                All
+              </Text>
+            </Pressable>
           </View>
         </View>
       </View>
@@ -437,41 +415,28 @@ export default function LeaderboardsScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={Colors.primary}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
         }
       >
         {activeTab === 'group-ranking' ? (
           leaderboard.length === 0 ? (
-            <EmptyState
-              icon="📊"
-              title="No Data Yet"
-              subtitle="Complete matches to see rankings"
-            />
+            <EmptyState icon="📊" title="No Data Yet" subtitle="Complete matches to see rankings" />
           ) : (
             <>
-              {/* Your Rank Highlight */}
               {userRank && (
-                <View style={styles.yourRankCard}>
-                  <Text style={styles.yourRankLabel}>YOUR RANK</Text>
-                  <View style={styles.yourRankContent}>
-                    <View style={styles.yourRankBadge}>
-                      <Text style={styles.yourRankNumber}>#{userRank.rank}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.yourRankLevel}>{userRank.level.toFixed(1)}</Text>
-                      <Text style={styles.yourRankRecord}>
-                        {userRank.wins}W–{userRank.losses}L • {userRank.winPercentage.toFixed(0)}%
-                      </Text>
-                    </View>
+                <View style={styles.yourRank}>
+                  <View style={styles.rankBadge}>
+                    <Text style={styles.rankNumber}>#{userRank.rank}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.yourLevel}>{userRank.level.toFixed(1)}</Text>
+                    <Text style={styles.yourRecord}>
+                      {userRank.wins}W–{userRank.losses}L • {userRank.winPercentage.toFixed(0)}%
+                    </Text>
                   </View>
                 </View>
               )}
 
-              {/* Leaderboard */}
               <View style={styles.rankedList}>
                 {leaderboard.map((entry) => (
                   <Pressable
@@ -483,42 +448,35 @@ export default function LeaderboardsScreen() {
                     onPress={() => handleRowPress(entry)}
                   >
                     <View style={[
-                      styles.rankBadge,
-                      entry.rank <= 3 && styles.rankBadgeTop,
-                      entry.rank === 1 && styles.rankBadgeFirst,
+                      styles.rankNum,
+                      entry.rank <= 3 && styles.rankNumTop,
                     ]}>
                       <Text style={[
-                        styles.rankBadgeText,
-                        entry.rank <= 3 && styles.rankBadgeTextTop,
+                        styles.rankNumText,
+                        entry.rank <= 3 && styles.rankNumTextTop,
                       ]}>
-                        #{entry.rank}
+                        {entry.rank}
                       </Text>
                     </View>
 
                     <UserAvatar
                       name={entry.user?.displayName || entry.user?.username}
                       avatarUrl={entry.user?.avatarUrl}
-                      size={44}
+                      size={36}
                     />
 
-                    <View style={styles.rankPlayerInfo}>
+                    <View style={styles.rankInfo}>
                       <UserName
                         profile={entry.user}
-                        displayNameStyle={styles.rankPlayerName}
+                        displayNameStyle={styles.rankName}
                         numberOfLines={1}
                       />
-                      <Text style={styles.rankPlayerRecord}>
-                        {entry.wins}W–{entry.losses}L
-                      </Text>
+                      <Text style={styles.rankRec}>{entry.wins}W–{entry.losses}L</Text>
                     </View>
 
                     <View style={styles.rankStats}>
-                      <Text style={styles.rankLevel}>
-                        {entry.level.toFixed(1)}
-                      </Text>
-                      <Text style={styles.rankWinRate}>
-                        {entry.winPercentage.toFixed(0)}%
-                      </Text>
+                      <Text style={styles.rankLvl}>{entry.level.toFixed(1)}</Text>
+                      <Text style={styles.rankWr}>{entry.winPercentage.toFixed(0)}%</Text>
                     </View>
                   </Pressable>
                 ))}
@@ -527,112 +485,87 @@ export default function LeaderboardsScreen() {
           )
         ) : (
           loadingStats ? (
-            <View style={styles.loadingContainer}>
-              <LoadingSpinner size={32} />
-              <Text style={styles.loadingText}>Loading stats...</Text>
+            <View style={styles.loadingBox}>
+              <LoadingSpinner size={24} />
             </View>
           ) : headToHeadStats && selectedFriend ? (
-            <View style={styles.headToHeadSection}>
-              {/* VS Card */}
-              <View style={styles.vsCard}>
-                <Text style={styles.vsLabel}>YOU VS</Text>
-                <UserAvatar
-                  name={selectedFriend.displayName || selectedFriend.username}
-                  avatarUrl={selectedFriend.avatarUrl}
-                  size={80}
-                />
-                <Text style={styles.vsName}>
-                  {selectedFriend.displayName || selectedFriend.username}
-                </Text>
-              </View>
-
-              {/* Record */}
-              <View style={styles.recordCard}>
-                <Text style={styles.recordValue}>
+            <>
+              <View style={styles.recordBox}>
+                <Text style={styles.recordBig}>
                   {headToHeadStats.wins}–{headToHeadStats.losses}
                 </Text>
-                <Text style={styles.recordLabel}>Overall Record</Text>
+                <Text style={styles.recordSmall}>Overall Record</Text>
               </View>
 
-              {/* Stats */}
-              <View style={styles.statsGrid}>
+              <View style={styles.statsRow}>
                 <View style={styles.statBox}>
-                  <Text style={styles.statBoxValue}>{headToHeadStats.winRate}%</Text>
-                  <Text style={styles.statBoxLabel}>Win Rate</Text>
+                  <Text style={styles.statVal}>{headToHeadStats.winRate}%</Text>
+                  <Text style={styles.statLbl}>Win Rate</Text>
                 </View>
                 <View style={styles.statBox}>
                   <Text style={[
-                    styles.statBoxValue,
+                    styles.statVal,
                     headToHeadStats.streakType === 'W' && { color: Colors.success },
                     headToHeadStats.streakType === 'L' && { color: Colors.danger },
                   ]}>
                     {headToHeadStats.streak}{headToHeadStats.streakType}
                   </Text>
-                  <Text style={styles.statBoxLabel}>Streak</Text>
+                  <Text style={styles.statLbl}>Streak</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statVal}>{headToHeadStats.totalMatches}</Text>
+                  <Text style={styles.statLbl}>Matches</Text>
                 </View>
               </View>
 
-              {/* Last 5 */}
               {headToHeadStats.last5.length > 0 && (
-                <View style={styles.last5Card}>
-                  <Text style={styles.last5Label}>Last 5 Matches</Text>
+                <View style={styles.last5}>
+                  <Text style={styles.last5Title}>Last 5</Text>
                   <View style={styles.last5Row}>
                     {headToHeadStats.last5.map((result: string, idx: number) => (
                       <View
                         key={idx}
                         style={[
                           styles.last5Badge,
-                          result === 'W' && styles.last5BadgeWin,
-                          result === 'L' && styles.last5BadgeLoss,
+                          result === 'W' && { backgroundColor: Colors.success },
+                          result === 'L' && { backgroundColor: Colors.danger },
                         ]}
                       >
-                        <Text style={styles.last5BadgeText}>{result}</Text>
+                        <Text style={styles.last5Text}>{result}</Text>
                       </View>
                     ))}
                   </View>
                 </View>
               )}
 
-              {/* Recent Matches */}
               {headToHeadStats.recentMatches && headToHeadStats.recentMatches.length > 0 && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Recent Matches</Text>
+                <View style={styles.matchList}>
                   {headToHeadStats.recentMatches.map((match: any) => (
                     <Pressable
                       key={match.matchId}
-                      style={styles.matchRow}
+                      style={styles.matchItem}
                       onPress={() => router.push(`/match/${match.matchId}`)}
                     >
                       <View style={[
-                        styles.matchResultBadge,
-                        match.iWon && styles.matchResultWin,
-                        match.opponentWon && styles.matchResultLoss,
+                        styles.matchBadge,
+                        match.iWon && { backgroundColor: Colors.success },
+                        match.opponentWon && { backgroundColor: Colors.danger },
                       ]}>
-                        <Text style={styles.matchResultText}>{match.iWon ? 'W' : 'L'}</Text>
+                        <Text style={styles.matchBadgeText}>{match.iWon ? 'W' : 'L'}</Text>
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.matchDate}>
-                          {new Date(match.createdAt).toLocaleDateString()}
-                        </Text>
-                      </View>
-                      <MaterialIcons name="chevron-right" size={20} color={Colors.textMuted} />
+                      <Text style={styles.matchDate}>
+                        {new Date(match.createdAt).toLocaleDateString()}
+                      </Text>
+                      <MaterialIcons name="chevron-right" size={16} color={Colors.textMuted} />
                     </Pressable>
                   ))}
                 </View>
               )}
-            </View>
+            </>
           ) : selectedOpponent ? (
-            <EmptyState
-              icon="📊"
-              title="No Matches Found"
-              subtitle="You haven't played against this player yet"
-            />
+            <EmptyState icon="📊" title="No Matches" subtitle="You haven't played this player yet" />
           ) : (
-            <EmptyState
-              icon="🎯"
-              title="Select an Opponent"
-              subtitle="Choose a player to view your head-to-head record"
-            />
+            <EmptyState icon="🎯" title="Select Opponent" subtitle="Choose a player to view stats" />
           )
         )}
       </ScrollView>
@@ -644,24 +577,18 @@ export default function LeaderboardsScreen() {
         animationType="slide"
         onRequestClose={() => setShowOpponentPicker(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowOpponentPicker(false)}
-        >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowOpponentPicker(false)}>
           <Pressable
             style={[styles.pickerModal, { paddingBottom: insets.bottom + 16 }]}
             onPress={(e) => e.stopPropagation()}
           >
             <View style={styles.pickerHeader}>
               <Text style={styles.pickerTitle}>Choose Opponent</Text>
-              <Pressable
-                onPress={() => setShowOpponentPicker(false)}
-                style={styles.pickerClose}
-              >
+              <Pressable onPress={() => setShowOpponentPicker(false)}>
                 <MaterialIcons name="close" size={24} color={Colors.textMuted} />
               </Pressable>
             </View>
-            <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false}>
               {friends.map(friendship => (
                 <Pressable
                   key={friendship.id}
@@ -677,17 +604,17 @@ export default function LeaderboardsScreen() {
                   <UserAvatar
                     name={friendship.friend.displayName || friendship.friend.username}
                     avatarUrl={friendship.friend.avatarUrl}
-                    size={40}
+                    size={36}
                   />
-                  <View style={styles.pickerItemInfo}>
+                  <View style={{ flex: 1 }}>
                     <UserName
                       profile={friendship.friend}
-                      displayNameStyle={styles.pickerItemName}
-                      handleStyle={styles.pickerItemHandle}
+                      displayNameStyle={styles.pickerName}
+                      handleStyle={styles.pickerHandle}
                     />
                   </View>
                   {selectedOpponent === friendship.friend.id && (
-                    <MaterialIcons name="check-circle" size={24} color={Colors.primary} />
+                    <MaterialIcons name="check-circle" size={20} color={Colors.primary} />
                   )}
                 </Pressable>
               ))}
@@ -708,101 +635,101 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerLogo: {
+  logo: {
     width: 32,
     height: 32,
   },
   headerTitle: {
-    fontSize: Typography.sizes.xxl,
+    fontSize: Typography.sizes.xl,
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
-  tabBar: {
-    flexDirection: 'row',
+  controls: {
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    paddingHorizontal: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
   },
-  tabButton: {
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.md,
+    padding: 2,
+  },
+  tab: {
     flex: 1,
-    paddingVertical: Spacing.md,
+    paddingVertical: 6,
     alignItems: 'center',
+    borderRadius: BorderRadius.sm,
   },
-  tabButtonActive: {
-    borderBottomWidth: 2,
-    borderBottomColor: Colors.primary,
+  tabActive: {
+    backgroundColor: Colors.primary,
   },
-  tabButtonText: {
+  tabText: {
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.medium,
     color: Colors.textMuted,
   },
-  tabButtonTextActive: {
-    color: Colors.primary,
+  tabTextActive: {
+    color: Colors.textPrimary,
     fontWeight: Typography.weights.semibold,
   },
-  controls: {
-    padding: Spacing.lg,
-    gap: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  controlSection: {
+  selectorsRow: {
+    flexDirection: 'row',
     gap: Spacing.xs,
   },
-  controlLabel: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  controlPill: {
+  groupPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
   },
-  controlPillText: {
-    fontSize: Typography.sizes.base,
+  groupText: {
+    flex: 1,
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.semibold,
     color: Colors.textPrimary,
   },
-  playerSelector: {
+  opponentPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
     backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
   },
-  playerSelectorText: {
+  opponentText: {
     flex: 1,
-    fontSize: Typography.sizes.base,
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.medium,
     color: Colors.textPrimary,
   },
-  playerSelectorPlaceholder: {
+  opponentPlaceholder: {
     flex: 1,
-    fontSize: Typography.sizes.base,
+    fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
   },
-  splitControls: {
+  miniControls: {
     flexDirection: 'row',
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
-  segmentedControl: {
+  miniGroup: {
+    flex: 1,
     flexDirection: 'row',
     backgroundColor: Colors.surfaceElevated,
     borderRadius: BorderRadius.md,
@@ -810,102 +737,93 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     padding: 2,
   },
-  segment: {
+  miniBtn: {
     flex: 1,
-    paddingVertical: Spacing.sm,
+    paddingVertical: 4,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: BorderRadius.sm,
   },
-  segmentActive: {
+  miniBtnActive: {
     backgroundColor: Colors.primary,
   },
-  segmentText: {
-    fontSize: Typography.sizes.sm,
+  miniIcon: {
+    width: 16,
+    height: 16,
+  },
+  miniIconInactive: {
+    opacity: 0.5,
+  },
+  miniBtnText: {
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.medium,
     color: Colors.textMuted,
   },
-  segmentTextActive: {
+  miniBtnTextActive: {
     color: Colors.textPrimary,
     fontWeight: Typography.weights.semibold,
-  },
-  sportIcon: {
-    width: 20,
-    height: 20,
-  },
-  sportIconInactive: {
-    opacity: 0.5,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: Spacing.lg,
-    gap: Spacing.lg,
+    padding: Spacing.md,
+    gap: Spacing.md,
   },
 
-  // Group Ranking styles
-  yourRankCard: {
+  // Group Ranking
+  yourRank: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
     backgroundColor: Colors.primary + '20',
     borderRadius: BorderRadius.md,
     borderWidth: 2,
     borderColor: Colors.primary,
-    padding: Spacing.lg,
-    gap: Spacing.sm,
+    padding: Spacing.md,
   },
-  yourRankLabel: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.primary,
-    letterSpacing: 1.5,
-  },
-  yourRankContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  yourRankBadge: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  rankBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  yourRankNumber: {
-    fontSize: 20,
+  rankNumber: {
+    fontSize: 16,
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
-  yourRankLevel: {
-    fontSize: 32,
+  yourLevel: {
+    fontSize: 28,
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
-  yourRankRecord: {
+  yourRecord: {
     fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
   },
   rankedList: {
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
   rankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
+    padding: Spacing.sm,
   },
   rankRowHighlighted: {
     borderColor: Colors.primary,
     borderWidth: 2,
   },
-  rankBadge: {
-    width: 40,
-    height: 40,
+  rankNum: {
+    width: 32,
+    height: 32,
     borderRadius: BorderRadius.md,
     backgroundColor: Colors.surfaceElevated,
     alignItems: 'center',
@@ -913,32 +831,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  rankBadgeTop: {
+  rankNumTop: {
     backgroundColor: Colors.primary + '20',
     borderColor: Colors.primary,
   },
-  rankBadgeFirst: {
-    backgroundColor: Colors.accentGold + '20',
-    borderColor: Colors.accentGold,
-  },
-  rankBadgeText: {
+  rankNumText: {
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
     color: Colors.textMuted,
   },
-  rankBadgeTextTop: {
+  rankNumTextTop: {
     color: Colors.primary,
   },
-  rankPlayerInfo: {
+  rankInfo: {
     flex: 1,
     gap: 2,
   },
-  rankPlayerName: {
-    fontSize: Typography.sizes.base,
+  rankName: {
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.semibold,
     color: Colors.textPrimary,
   },
-  rankPlayerRecord: {
+  rankRec: {
     fontSize: Typography.sizes.xs,
     color: Colors.textMuted,
   },
@@ -946,70 +860,42 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 2,
   },
-  rankLevel: {
-    fontSize: 28,
+  rankLvl: {
+    fontSize: 24,
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
-  rankWinRate: {
+  rankWr: {
     fontSize: Typography.sizes.xs,
     color: Colors.textMuted,
   },
 
-  // Head-to-head styles
-  loadingContainer: {
+  // Head-to-head
+  loadingBox: {
     paddingVertical: Spacing.xxl,
     alignItems: 'center',
-    gap: Spacing.md,
   },
-  loadingText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
-  },
-  headToHeadSection: {
-    gap: Spacing.lg,
-  },
-  vsCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.xl,
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  vsLabel: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.bold,
-    color: Colors.textMuted,
-    letterSpacing: 1.5,
-  },
-  vsName: {
-    fontSize: Typography.sizes.xl,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textPrimary,
-  },
-  recordCard: {
+  recordBox: {
     backgroundColor: Colors.primary + '20',
     borderRadius: BorderRadius.md,
     borderWidth: 2,
     borderColor: Colors.primary,
-    padding: Spacing.xxl,
+    padding: Spacing.lg,
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: 4,
   },
-  recordValue: {
-    fontSize: 56,
+  recordBig: {
+    fontSize: 40,
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
-  recordLabel: {
+  recordSmall: {
     fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
   },
-  statsGrid: {
+  statsRow: {
     flexDirection: 'row',
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
   statBox: {
     flex: 1,
@@ -1017,33 +903,31 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: Spacing.lg,
+    padding: Spacing.sm,
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: 4,
   },
-  statBoxValue: {
-    fontSize: 32,
+  statVal: {
+    fontSize: 20,
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
-  statBoxLabel: {
+  statLbl: {
     fontSize: Typography.sizes.xs,
     color: Colors.textMuted,
   },
-  last5Card: {
+  last5: {
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: Spacing.lg,
-    gap: Spacing.md,
+    padding: Spacing.sm,
+    gap: Spacing.xs,
   },
-  last5Label: {
+  last5Title: {
     fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.semibold,
     color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   last5Row: {
     flexDirection: 'row',
@@ -1051,65 +935,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   last5Badge: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  last5BadgeWin: {
-    backgroundColor: Colors.success,
-  },
-  last5BadgeLoss: {
-    backgroundColor: Colors.danger,
-  },
-  last5BadgeText: {
-    fontSize: Typography.sizes.lg,
+  last5Text: {
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
-  section: {
-    gap: Spacing.md,
+  matchList: {
+    gap: Spacing.xs,
   },
-  sectionTitle: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textPrimary,
-  },
-  matchRow: {
+  matchItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
+    padding: Spacing.sm,
   },
-  matchResultBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  matchBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  matchResultWin: {
-    backgroundColor: Colors.success,
-  },
-  matchResultLoss: {
-    backgroundColor: Colors.danger,
-  },
-  matchResultText: {
-    fontSize: Typography.sizes.base,
+  matchBadgeText: {
+    fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
   matchDate: {
+    flex: 1,
     fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
   },
 
-  // Modal styles
+  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1119,13 +987,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderTopLeftRadius: BorderRadius.lg,
     borderTopRightRadius: BorderRadius.lg,
-    height: '70%',
+    maxHeight: '70%',
   },
   pickerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: Spacing.lg,
+    padding: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
@@ -1134,34 +1002,24 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
-  pickerClose: {
-    padding: Spacing.xs,
-  },
-  pickerList: {
-    flexGrow: 1,
-    flexShrink: 1,
-  },
   pickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.lg,
+    gap: Spacing.sm,
+    padding: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   pickerItemSelected: {
     backgroundColor: Colors.surfaceElevated,
   },
-  pickerItemInfo: {
-    flex: 1,
-  },
-  pickerItemName: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
+  pickerName: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
     color: Colors.textPrimary,
   },
-  pickerItemHandle: {
-    fontSize: Typography.sizes.sm,
+  pickerHandle: {
+    fontSize: Typography.sizes.xs,
     color: Colors.textMuted,
   },
 });

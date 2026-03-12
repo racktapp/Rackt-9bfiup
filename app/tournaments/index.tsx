@@ -1,18 +1,17 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Modal, TextInput } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
-import { Button, ScreenLoader, EmptyState, ErrorState, UserAvatar, UserName, LoadingSpinner } from '@/components';
+import { ScreenLoader, EmptyState, ErrorState, UserAvatar, UserName, LoadingSpinner } from '@/components';
 import { useAlert } from '@/template';
 import { tournamentsService } from '@/services/tournaments';
 import { Tournament, TournamentInvite } from '@/types';
 import { getSupabaseClient } from '@/template';
 import { useGroups } from '@/hooks/useGroups';
 import { friendsService } from '@/services/friends';
-import { matchesService } from '@/services/matches';
 
 const supabase = getSupabaseClient();
 
@@ -36,11 +35,9 @@ export default function TournamentsHomeScreen() {
 
   // Records tab state
   const [groups, setGroups] = useState<any[]>([]);
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [friends, setFriends] = useState<any[]>([]);
   const [selectedOpponent, setSelectedOpponent] = useState<string | null>(null);
   const [showOpponentPicker, setShowOpponentPicker] = useState(false);
-  const [recordPeriod, setRecordPeriod] = useState<'all' | 'month' | 'year'>('all');
   const [headToHeadStats, setHeadToHeadStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(false);
 
@@ -61,10 +58,10 @@ export default function TournamentsHomeScreen() {
   }, [userId]);
 
   useEffect(() => {
-    if (selectedGroup && selectedOpponent && activeTab === 'records') {
+    if (selectedOpponent && activeTab === 'records') {
       loadHeadToHeadStats();
     }
-  }, [selectedGroup, selectedOpponent, recordPeriod, activeTab]);
+  }, [selectedOpponent, activeTab]);
 
   const loadUserId = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -76,9 +73,6 @@ export default function TournamentsHomeScreen() {
     try {
       const data = await getUserGroups(userId);
       setGroups(data);
-      if (data.length > 0 && !selectedGroup) {
-        setSelectedGroup(data[0].id);
-      }
     } catch (err) {
       console.error('Error loading groups:', err);
     }
@@ -115,11 +109,10 @@ export default function TournamentsHomeScreen() {
   };
 
   const loadHeadToHeadStats = async () => {
-    if (!userId || !selectedGroup || !selectedOpponent) return;
+    if (!userId || !selectedOpponent) return;
 
     setLoadingStats(true);
     try {
-      // Get all matches between these two players in this group
       const { data: matchPlayers } = await supabase
         .from('match_players')
         .select(`
@@ -129,9 +122,7 @@ export default function TournamentsHomeScreen() {
             id,
             status,
             winner_team,
-            created_at,
-            group_id,
-            match_sets(team_a_score, team_b_score)
+            created_at
           )
         `)
         .eq('user_id', userId);
@@ -142,19 +133,13 @@ export default function TournamentsHomeScreen() {
         return;
       }
 
-      // Filter for confirmed matches in selected group
       const relevantMatches = matchPlayers
-        .filter((mp: any) => 
-          mp.match?.status === 'confirmed' &&
-          mp.match?.group_id === selectedGroup
-        )
+        .filter((mp: any) => mp.match?.status === 'confirmed')
         .map((mp: any) => mp.match)
         .filter((match: any, index: number, self: any[]) => 
-          // Deduplicate matches
           self.findIndex((m: any) => m.id === match.id) === index
         );
 
-      // Check if opponent was in each match
       const matchesVsOpponent = await Promise.all(
         relevantMatches.map(async (match: any) => {
           const { data: opponentPlayer } = await supabase
@@ -176,38 +161,21 @@ export default function TournamentsHomeScreen() {
 
           return {
             matchId: match.id,
-            myTeam,
-            opponentTeam,
             iWon,
             opponentWon,
             createdAt: match.created_at,
-            sets: match.match_sets,
           };
         })
       );
 
       const validMatches = matchesVsOpponent.filter(Boolean);
+      const wins = validMatches.filter((m: any) => m.iWon).length;
+      const losses = validMatches.filter((m: any) => m.opponentWon).length;
+      const winRate = validMatches.length > 0 ? Math.round((wins / validMatches.length) * 100) : 0;
 
-      // Apply period filter
-      let filteredMatches = validMatches;
-      if (recordPeriod === 'month') {
-        const now = new Date();
-        const monthAgo = new Date(now.getFullYear(), now.getMonth(), 1);
-        filteredMatches = validMatches.filter((m: any) => new Date(m.createdAt) >= monthAgo);
-      } else if (recordPeriod === 'year') {
-        const now = new Date();
-        const yearAgo = new Date(now.getFullYear(), 0, 1);
-        filteredMatches = validMatches.filter((m: any) => new Date(m.createdAt) >= yearAgo);
-      }
-
-      const wins = filteredMatches.filter((m: any) => m.iWon).length;
-      const losses = filteredMatches.filter((m: any) => m.opponentWon).length;
-      const winRate = filteredMatches.length > 0 ? Math.round((wins / filteredMatches.length) * 100) : 0;
-
-      // Calculate streak
       let currentStreak = 0;
       let streakType: 'W' | 'L' | null = null;
-      const sortedMatches = [...filteredMatches].sort((a: any, b: any) => 
+      const sortedMatches = [...validMatches].sort((a: any, b: any) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
 
@@ -223,7 +191,6 @@ export default function TournamentsHomeScreen() {
         }
       }
 
-      // Get last 5 results
       const last5 = sortedMatches.slice(0, 5).map((m: any) => m.iWon ? 'W' : 'L');
 
       setHeadToHeadStats({
@@ -233,8 +200,8 @@ export default function TournamentsHomeScreen() {
         streak: currentStreak,
         streakType,
         last5,
-        totalMatches: filteredMatches.length,
-        recentMatches: sortedMatches.slice(0, 5),
+        totalMatches: validMatches.length,
+        recentMatches: sortedMatches.slice(0, 3),
       });
     } catch (err) {
       console.error('Error loading head-to-head stats:', err);
@@ -312,33 +279,27 @@ export default function TournamentsHomeScreen() {
       >
         {/* Pending Invites */}
         {pendingInvites.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Pending Invites</Text>
+          <View style={styles.invitesSection}>
             {pendingInvites.map((invite) => (
               <View key={invite.id} style={styles.inviteCard}>
-                <View style={styles.inviteHeader}>
-                  <MaterialIcons name="mail" size={20} color={Colors.warning} />
+                <View style={styles.inviteRow}>
+                  <MaterialIcons name="mail" size={18} color={Colors.warning} />
                   <Text style={styles.inviteTitle}>{invite.tournament?.title || 'Tournament'}</Text>
-                </View>
-                <View style={styles.inviteMeta}>
-                  <Text style={styles.inviteMetaText}>
-                    {invite.tournament?.sport} • {invite.tournament?.type}
-                  </Text>
                 </View>
                 <View style={styles.inviteActions}>
                   <Pressable
-                    style={[styles.inviteButton, styles.inviteButtonDecline]}
+                    style={styles.inviteDecline}
                     onPress={() => handleRespondToInvite(invite.id, false)}
                     disabled={respondingToInvite !== null}
                   >
-                    <Text style={styles.inviteButtonTextDecline}>Decline</Text>
+                    <Text style={styles.inviteDeclineText}>Decline</Text>
                   </Pressable>
                   <Pressable
-                    style={[styles.inviteButton, styles.inviteButtonAccept]}
+                    style={styles.inviteAccept}
                     onPress={() => handleRespondToInvite(invite.id, true)}
                     disabled={respondingToInvite !== null}
                   >
-                    <Text style={styles.inviteButtonTextAccept}>Accept</Text>
+                    <Text style={styles.inviteAcceptText}>Accept</Text>
                   </Pressable>
                 </View>
               </View>
@@ -346,74 +307,60 @@ export default function TournamentsHomeScreen() {
           </View>
         )}
 
-        {/* Summary Stats */}
-        <View style={styles.statsCard}>
-          <View style={styles.statRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{activeTournaments.length}</Text>
-              <Text style={styles.statLabel}>Active</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{completedTournaments.length}</Text>
-              <Text style={styles.statLabel}>Completed</Text>
-            </View>
+        {/* Stats Summary */}
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>{activeTournaments.length}</Text>
+            <Text style={styles.summaryLabel}>Active</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>{completedTournaments.length}</Text>
+            <Text style={styles.summaryLabel}>Completed</Text>
           </View>
         </View>
 
         {/* Most Active Group */}
         {mostActiveGroup && (
-          <Pressable style={styles.groupHighlight} onPress={() => router.push(`/group/${mostActiveGroup.id}`)}>
-            <View style={styles.groupHighlightHeader}>
-              <MaterialIcons name="group" size={20} color={Colors.primary} />
-              <Text style={styles.groupHighlightLabel}>Most Active Group</Text>
-            </View>
-            <Text style={styles.groupHighlightName}>{mostActiveGroup.name}</Text>
-            <MaterialIcons name="chevron-right" size={20} color={Colors.textMuted} />
+          <Pressable style={styles.compactCard} onPress={() => router.push(`/group/${mostActiveGroup.id}`)}>
+            <MaterialIcons name="group" size={18} color={Colors.primary} />
+            <Text style={styles.compactCardText}>{mostActiveGroup.name}</Text>
+            <MaterialIcons name="chevron-right" size={18} color={Colors.textMuted} />
           </Pressable>
         )}
 
         {/* Recent Tournament */}
         {recentTournament && (
           <Pressable
-            style={styles.recentTournamentCard}
+            style={styles.tournamentHighlight}
             onPress={() => router.push(`/tournaments/${recentTournament.id}`)}
           >
-            <Text style={styles.recentTournamentLabel}>RECENT TOURNAMENT</Text>
-            <View style={styles.recentTournamentContent}>
+            <View style={styles.highlightHeader}>
               <Image
                 source={recentTournament.sport === 'tennis' 
                   ? require('@/assets/icons/tennis_icon.png')
                   : require('@/assets/icons/padel_icon.png')
                 }
-                style={styles.recentTournamentIcon}
+                style={styles.highlightIcon}
                 contentFit="contain"
                 transition={0}
               />
               <View style={{ flex: 1 }}>
-                <Text style={styles.recentTournamentTitle}>{recentTournament.title}</Text>
-                <Text style={styles.recentTournamentMeta}>
+                <Text style={styles.highlightTitle}>{recentTournament.title}</Text>
+                <Text style={styles.highlightMeta}>
                   {getStateLabel(recentTournament.state)} • {recentTournament.participants.length} players
                 </Text>
               </View>
-              <MaterialIcons name="chevron-right" size={24} color={Colors.textMuted} />
+              <MaterialIcons name="chevron-right" size={20} color={Colors.textMuted} />
             </View>
           </Pressable>
         )}
 
-        {/* Quick Action */}
-        <Pressable
-          style={styles.actionCard}
-          onPress={() => setActiveTab('records')}
-        >
-          <View style={styles.actionCardContent}>
-            <MaterialIcons name="sports-tennis" size={32} color={Colors.primary} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.actionCardTitle}>View 1v1 Record</Text>
-              <Text style={styles.actionCardSubtitle}>Check your head-to-head stats</Text>
-            </View>
-            <MaterialIcons name="arrow-forward" size={24} color={Colors.primary} />
-          </View>
+        {/* Quick Action to Records */}
+        <Pressable style={styles.recordsShortcut} onPress={() => setActiveTab('records')}>
+          <MaterialIcons name="sports-tennis" size={20} color={Colors.primary} />
+          <Text style={styles.shortcutText}>View 1v1 Record</Text>
+          <MaterialIcons name="arrow-forward" size={18} color={Colors.primary} />
         </Pressable>
 
         {(!mostActiveGroup && !recentTournament && pendingInvites.length === 0) && (
@@ -432,195 +379,114 @@ export default function TournamentsHomeScreen() {
       ? friends.find(f => f.friend.id === selectedOpponent)?.friend 
       : null;
 
-    const selectedGroupData = groups.find(g => g.id === selectedGroup);
-
     return (
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Controls */}
-        <View style={styles.recordsControls}>
-          {/* Group Selector */}
-          <View style={styles.controlSection}>
-            <Text style={styles.controlLabel}>Group</Text>
-            <View style={styles.controlPill}>
-              <Text style={styles.controlPillText}>
-                {selectedGroupData?.name || 'Select Group'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Player Selector */}
-          <View style={styles.controlSection}>
-            <Text style={styles.controlLabel}>Opponent</Text>
-            <Pressable
-              style={styles.playerSelector}
-              onPress={() => setShowOpponentPicker(true)}
-            >
-              {selectedFriend ? (
-                <>
-                  <UserAvatar
-                    name={selectedFriend.displayName || selectedFriend.username}
-                    avatarUrl={selectedFriend.avatarUrl}
-                    size={32}
-                  />
-                  <Text style={styles.playerSelectorText}>
-                    {selectedFriend.displayName || selectedFriend.username}
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.playerSelectorPlaceholder}>Choose player</Text>
-              )}
-              <MaterialIcons name="arrow-drop-down" size={24} color={Colors.textMuted} />
-            </Pressable>
-          </View>
-
-          {/* Time Selector */}
-          <View style={styles.controlSection}>
-            <Text style={styles.controlLabel}>Period</Text>
-            <View style={styles.segmentedControl}>
-              <Pressable
-                style={[styles.segment, recordPeriod === 'month' && styles.segmentActive]}
-                onPress={() => setRecordPeriod('month')}
-              >
-                <Text style={[styles.segmentText, recordPeriod === 'month' && styles.segmentTextActive]}>
-                  Month
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.segment, recordPeriod === 'year' && styles.segmentActive]}
-                onPress={() => setRecordPeriod('year')}
-              >
-                <Text style={[styles.segmentText, recordPeriod === 'year' && styles.segmentTextActive]}>
-                  Year
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.segment, recordPeriod === 'all' && styles.segmentActive]}
-                onPress={() => setRecordPeriod('all')}
-              >
-                <Text style={[styles.segmentText, recordPeriod === 'all' && styles.segmentTextActive]}>
-                  All
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-
-        {/* Head-to-Head Stats */}
-        {loadingStats ? (
-          <View style={styles.loadingContainer}>
-            <LoadingSpinner size={32} />
-            <Text style={styles.loadingText}>Loading stats...</Text>
-          </View>
-        ) : headToHeadStats && selectedFriend ? (
-          <View style={styles.statsSection}>
-            {/* Player Card */}
-            <View style={styles.vsCard}>
-              <Text style={styles.vsLabel}>YOU VS</Text>
+        {/* Opponent Selector */}
+        <Pressable style={styles.opponentPicker} onPress={() => setShowOpponentPicker(true)}>
+          {selectedFriend ? (
+            <>
               <UserAvatar
                 name={selectedFriend.displayName || selectedFriend.username}
                 avatarUrl={selectedFriend.avatarUrl}
-                size={64}
+                size={32}
               />
-              <Text style={styles.vsName}>
+              <Text style={styles.opponentName}>
                 {selectedFriend.displayName || selectedFriend.username}
               </Text>
-            </View>
+            </>
+          ) : (
+            <Text style={styles.opponentPlaceholder}>Choose opponent</Text>
+          )}
+          <MaterialIcons name="arrow-drop-down" size={24} color={Colors.textMuted} />
+        </Pressable>
 
-            {/* Record */}
-            <View style={styles.recordCard}>
-              <Text style={styles.recordValue}>
+        {/* Stats */}
+        {loadingStats ? (
+          <View style={styles.loadingBox}>
+            <LoadingSpinner size={24} />
+          </View>
+        ) : headToHeadStats && selectedFriend ? (
+          <>
+            <View style={styles.recordBox}>
+              <Text style={styles.recordBig}>
                 {headToHeadStats.wins}–{headToHeadStats.losses}
               </Text>
-              <Text style={styles.recordLabel}>Overall Record</Text>
+              <Text style={styles.recordSmall}>Overall Record</Text>
             </View>
 
-            {/* Stats Grid */}
-            <View style={styles.miniStatsGrid}>
-              <View style={styles.miniStatItem}>
-                <Text style={styles.miniStatValue}>{headToHeadStats.winRate}%</Text>
-                <Text style={styles.miniStatLabel}>Win Rate</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{headToHeadStats.winRate}%</Text>
+                <Text style={styles.statLabel}>Win Rate</Text>
               </View>
-              <View style={styles.miniStatItem}>
+              <View style={styles.statBox}>
                 <Text style={[
-                  styles.miniStatValue,
+                  styles.statValue,
                   headToHeadStats.streakType === 'W' && { color: Colors.success },
                   headToHeadStats.streakType === 'L' && { color: Colors.danger },
                 ]}>
                   {headToHeadStats.streak}{headToHeadStats.streakType}
                 </Text>
-                <Text style={styles.miniStatLabel}>Streak</Text>
+                <Text style={styles.statLabel}>Streak</Text>
               </View>
-              <View style={styles.miniStatItem}>
-                <Text style={styles.miniStatValue}>{headToHeadStats.totalMatches}</Text>
-                <Text style={styles.miniStatLabel}>Matches</Text>
+              <View style={styles.statBox}>
+                <Text style={styles.statValue}>{headToHeadStats.totalMatches}</Text>
+                <Text style={styles.statLabel}>Matches</Text>
               </View>
             </View>
 
-            {/* Last 5 */}
             {headToHeadStats.last5.length > 0 && (
-              <View style={styles.last5Card}>
-                <Text style={styles.last5Label}>Last 5</Text>
+              <View style={styles.last5Box}>
+                <Text style={styles.last5Title}>Last 5</Text>
                 <View style={styles.last5Row}>
                   {headToHeadStats.last5.map((result: string, idx: number) => (
                     <View
                       key={idx}
                       style={[
                         styles.last5Badge,
-                        result === 'W' && styles.last5BadgeWin,
-                        result === 'L' && styles.last5BadgeLoss,
+                        result === 'W' && { backgroundColor: Colors.success },
+                        result === 'L' && { backgroundColor: Colors.danger },
                       ]}
                     >
-                      <Text style={styles.last5BadgeText}>{result}</Text>
+                      <Text style={styles.last5Text}>{result}</Text>
                     </View>
                   ))}
                 </View>
               </View>
             )}
 
-            {/* Recent Matches */}
             {headToHeadStats.recentMatches && headToHeadStats.recentMatches.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Recent Matches</Text>
+              <View style={styles.matchList}>
                 {headToHeadStats.recentMatches.map((match: any) => (
                   <Pressable
                     key={match.matchId}
-                    style={styles.matchHistoryRow}
+                    style={styles.matchItem}
                     onPress={() => router.push(`/match/${match.matchId}`)}
                   >
                     <View style={[
-                      styles.matchResultBadge,
-                      match.iWon && styles.matchResultWin,
-                      match.opponentWon && styles.matchResultLoss,
+                      styles.matchBadge,
+                      match.iWon && { backgroundColor: Colors.success },
+                      match.opponentWon && { backgroundColor: Colors.danger },
                     ]}>
-                      <Text style={styles.matchResultText}>{match.iWon ? 'W' : 'L'}</Text>
+                      <Text style={styles.matchBadgeText}>{match.iWon ? 'W' : 'L'}</Text>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.matchHistoryDate}>
-                        {new Date(match.createdAt).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    <MaterialIcons name="chevron-right" size={20} color={Colors.textMuted} />
+                    <Text style={styles.matchDate}>
+                      {new Date(match.createdAt).toLocaleDateString()}
+                    </Text>
+                    <MaterialIcons name="chevron-right" size={18} color={Colors.textMuted} />
                   </Pressable>
                 ))}
               </View>
             )}
-          </View>
+          </>
         ) : selectedOpponent ? (
-          <EmptyState
-            icon="📊"
-            title="No Matches Found"
-            subtitle="You haven't played against this player yet"
-          />
+          <EmptyState icon="📊" title="No Matches" subtitle="You haven't played this player yet" />
         ) : (
-          <EmptyState
-            icon="🎯"
-            title="Select an Opponent"
-            subtitle="Choose a player to view your head-to-head record"
-          />
+          <EmptyState icon="🎯" title="Select Opponent" subtitle="Choose a player to view stats" />
         )}
       </ScrollView>
     );
@@ -629,7 +495,6 @@ export default function TournamentsHomeScreen() {
   const renderEventsTab = () => {
     let filteredTournaments = [...activeTournaments, ...completedTournaments];
 
-    // Apply status filter
     if (eventsStatus === 'ongoing') {
       filteredTournaments = filteredTournaments.filter(t => 
         t.state === 'draft' || t.state === 'inviting' || t.state === 'locked' || t.state === 'in_progress'
@@ -638,7 +503,6 @@ export default function TournamentsHomeScreen() {
       filteredTournaments = filteredTournaments.filter(t => t.state === 'completed');
     }
 
-    // Apply group filter
     if (eventsView === 'my-groups') {
       const myGroupIds = groups.map(g => g.id);
       filteredTournaments = filteredTournaments.filter(t => 
@@ -646,7 +510,6 @@ export default function TournamentsHomeScreen() {
       );
     }
 
-    // Sort by most recent
     filteredTournaments.sort((a, b) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -661,100 +524,82 @@ export default function TournamentsHomeScreen() {
         }
       >
         {/* Filters */}
-        <View style={styles.eventsFilters}>
-          <View style={styles.segmentedControl}>
+        <View style={styles.filterRow}>
+          <View style={styles.filterGroup}>
             <Pressable
-              style={[styles.segment, eventsView === 'my-groups' && styles.segmentActive]}
+              style={[styles.filterChip, eventsView === 'my-groups' && styles.filterChipActive]}
               onPress={() => setEventsView('my-groups')}
             >
-              <Text style={[styles.segmentText, eventsView === 'my-groups' && styles.segmentTextActive]}>
+              <Text style={[styles.filterText, eventsView === 'my-groups' && styles.filterTextActive]}>
                 My Groups
               </Text>
             </Pressable>
             <Pressable
-              style={[styles.segment, eventsView === 'all' && styles.segmentActive]}
+              style={[styles.filterChip, eventsView === 'all' && styles.filterChipActive]}
               onPress={() => setEventsView('all')}
             >
-              <Text style={[styles.segmentText, eventsView === 'all' && styles.segmentTextActive]}>
+              <Text style={[styles.filterText, eventsView === 'all' && styles.filterTextActive]}>
                 All
               </Text>
             </Pressable>
           </View>
 
-          <View style={styles.segmentedControl}>
+          <View style={styles.filterGroup}>
             <Pressable
-              style={[styles.segment, eventsStatus === 'ongoing' && styles.segmentActive]}
+              style={[styles.filterChip, eventsStatus === 'ongoing' && styles.filterChipActive]}
               onPress={() => setEventsStatus('ongoing')}
             >
-              <Text style={[styles.segmentText, eventsStatus === 'ongoing' && styles.segmentTextActive]}>
+              <Text style={[styles.filterText, eventsStatus === 'ongoing' && styles.filterTextActive]}>
                 Ongoing
               </Text>
             </Pressable>
             <Pressable
-              style={[styles.segment, eventsStatus === 'completed' && styles.segmentActive]}
+              style={[styles.filterChip, eventsStatus === 'completed' && styles.filterChipActive]}
               onPress={() => setEventsStatus('completed')}
             >
-              <Text style={[styles.segmentText, eventsStatus === 'completed' && styles.segmentTextActive]}>
+              <Text style={[styles.filterText, eventsStatus === 'completed' && styles.filterTextActive]}>
                 Completed
               </Text>
             </Pressable>
           </View>
         </View>
 
-        {/* Tournaments List */}
+        {/* Events List */}
         {filteredTournaments.length > 0 ? (
-          <View style={styles.tournamentsList}>
+          <View style={styles.eventsList}>
             {filteredTournaments.map((tournament) => (
               <Pressable
                 key={tournament.id}
-                style={styles.tournamentCard}
+                style={styles.eventCard}
                 onPress={() => router.push(`/tournaments/${tournament.id}`)}
               >
-                <View style={styles.tournamentCardHeader}>
+                <View style={styles.eventHeader}>
                   <Image
                     source={tournament.sport === 'tennis' 
                       ? require('@/assets/icons/tennis_icon.png')
                       : require('@/assets/icons/padel_icon.png')
                     }
-                    style={styles.tournamentSportIcon}
+                    style={styles.eventIcon}
                     contentFit="contain"
                     transition={0}
                   />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.tournamentCardTitle}>{tournament.title}</Text>
-                    <View style={styles.tournamentCardMeta}>
-                      <Text style={styles.tournamentCardMetaText}>
-                        {tournament.type === 'americano' ? 'Americano' : 'Tournament'} • {tournament.mode}
-                      </Text>
-                    </View>
+                    <Text style={styles.eventTitle}>{tournament.title}</Text>
+                    <Text style={styles.eventMeta}>
+                      {tournament.type === 'americano' ? 'Americano' : 'Tournament'} • {tournament.participants.length} players
+                    </Text>
                   </View>
-                  <View style={[styles.stateBadge, { backgroundColor: getStateColor(tournament.state) + '20' }]}>
-                    <Text style={[styles.stateBadgeText, { color: getStateColor(tournament.state) }]}>
+                  <View style={[styles.eventBadge, { backgroundColor: getStateColor(tournament.state) + '20' }]}>
+                    <Text style={[styles.eventBadgeText, { color: getStateColor(tournament.state) }]}>
                       {getStateLabel(tournament.state)}
                     </Text>
                   </View>
-                </View>
-
-                <View style={styles.tournamentCardFooter}>
-                  <View style={styles.tournamentCardInfo}>
-                    <MaterialIcons name="people" size={14} color={Colors.textMuted} />
-                    <Text style={styles.tournamentCardInfoText}>
-                      {tournament.participants.length} players
-                    </Text>
-                  </View>
-                  <Text style={styles.tournamentCardDate}>
-                    {new Date(tournament.createdAt).toLocaleDateString()}
-                  </Text>
                 </View>
               </Pressable>
             ))}
           </View>
         ) : (
-          <EmptyState
-            icon="🏆"
-            title="No Tournaments"
-            subtitle="No tournaments match your filters"
-          />
+          <EmptyState icon="🏆" title="No Tournaments" subtitle="No tournaments match your filters" />
         )}
       </ScrollView>
     );
@@ -770,35 +615,34 @@ export default function TournamentsHomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Tab Controls */}
+      {/* Tab Bar */}
       <View style={styles.tabBar}>
         <Pressable
-          style={[styles.tabButton, activeTab === 'overview' && styles.tabButtonActive]}
+          style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
           onPress={() => setActiveTab('overview')}
         >
-          <Text style={[styles.tabButtonText, activeTab === 'overview' && styles.tabButtonTextActive]}>
+          <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
             Overview
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.tabButton, activeTab === 'records' && styles.tabButtonActive]}
+          style={[styles.tab, activeTab === 'records' && styles.tabActive]}
           onPress={() => setActiveTab('records')}
         >
-          <Text style={[styles.tabButtonText, activeTab === 'records' && styles.tabButtonTextActive]}>
+          <Text style={[styles.tabText, activeTab === 'records' && styles.tabTextActive]}>
             Records
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.tabButton, activeTab === 'events' && styles.tabButtonActive]}
+          style={[styles.tab, activeTab === 'events' && styles.tabActive]}
           onPress={() => setActiveTab('events')}
         >
-          <Text style={[styles.tabButtonText, activeTab === 'events' && styles.tabButtonTextActive]}>
+          <Text style={[styles.tabText, activeTab === 'events' && styles.tabTextActive]}>
             Events
           </Text>
         </Pressable>
       </View>
 
-      {/* Tab Content */}
       {activeTab === 'overview' && renderOverviewTab()}
       {activeTab === 'records' && renderRecordsTab()}
       {activeTab === 'events' && renderEventsTab()}
@@ -810,24 +654,18 @@ export default function TournamentsHomeScreen() {
         animationType="slide"
         onRequestClose={() => setShowOpponentPicker(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowOpponentPicker(false)}
-        >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowOpponentPicker(false)}>
           <Pressable
             style={[styles.pickerModal, { paddingBottom: insets.bottom + 16 }]}
             onPress={(e) => e.stopPropagation()}
           >
             <View style={styles.pickerHeader}>
               <Text style={styles.pickerTitle}>Choose Opponent</Text>
-              <Pressable
-                onPress={() => setShowOpponentPicker(false)}
-                style={styles.pickerClose}
-              >
+              <Pressable onPress={() => setShowOpponentPicker(false)}>
                 <MaterialIcons name="close" size={24} color={Colors.textMuted} />
               </Pressable>
             </View>
-            <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false}>
               {friends.map(friendship => (
                 <Pressable
                   key={friendship.id}
@@ -845,11 +683,11 @@ export default function TournamentsHomeScreen() {
                     avatarUrl={friendship.friend.avatarUrl}
                     size={40}
                   />
-                  <View style={styles.pickerItemInfo}>
+                  <View style={{ flex: 1 }}>
                     <UserName
                       profile={friendship.friend}
-                      displayNameStyle={styles.pickerItemName}
-                      handleStyle={styles.pickerItemHandle}
+                      displayNameStyle={styles.pickerName}
+                      handleStyle={styles.pickerHandle}
                     />
                   </View>
                   {selectedOpponent === friendship.friend.id && (
@@ -875,23 +713,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    paddingHorizontal: Spacing.xs,
   },
-  tabButton: {
+  tab: {
     flex: 1,
-    paddingVertical: Spacing.md,
+    paddingVertical: 10,
     alignItems: 'center',
   },
-  tabButtonActive: {
+  tabActive: {
     borderBottomWidth: 2,
     borderBottomColor: Colors.primary,
   },
-  tabButtonText: {
+  tabText: {
     fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.medium,
     color: Colors.textMuted,
   },
-  tabButtonTextActive: {
+  tabTextActive: {
     color: Colors.primary,
     fontWeight: Typography.weights.semibold,
   },
@@ -899,237 +736,280 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: Spacing.lg,
-    gap: Spacing.lg,
-  },
-  section: {
+    padding: Spacing.md,
     gap: Spacing.md,
-  },
-  sectionTitle: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textPrimary,
   },
 
-  // Overview styles
-  statsCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.lg,
-  },
-  statRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: Colors.border,
-  },
-  statValue: {
-    fontSize: 40,
-    fontWeight: Typography.weights.bold,
-    color: Colors.primary,
-  },
-  statLabel: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  groupHighlight: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  groupHighlightHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  groupHighlightLabel: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-  },
-  groupHighlightName: {
-    flex: 1,
-    fontSize: Typography.sizes.lg,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textPrimary,
-  },
-  recentTournamentCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.lg,
+  // Overview
+  invitesSection: {
     gap: Spacing.sm,
-  },
-  recentTournamentLabel: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textMuted,
-    letterSpacing: 1,
-  },
-  recentTournamentContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  recentTournamentIcon: {
-    width: 32,
-    height: 32,
-  },
-  recentTournamentTitle: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textPrimary,
-  },
-  recentTournamentMeta: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  actionCard: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.md,
-    borderWidth: 2,
-    borderColor: Colors.primary + '40',
-    padding: Spacing.lg,
-  },
-  actionCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  actionCardTitle: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textPrimary,
-  },
-  actionCardSubtitle: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
-    marginTop: 2,
   },
   inviteCard: {
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
     borderWidth: 2,
     borderColor: Colors.warning,
-    padding: Spacing.lg,
-    gap: Spacing.md,
+    padding: Spacing.md,
+    gap: Spacing.sm,
   },
-  inviteHeader: {
+  inviteRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
   },
   inviteTitle: {
-    fontSize: Typography.sizes.base,
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.semibold,
     color: Colors.textPrimary,
-  },
-  inviteMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  inviteMetaText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
   },
   inviteActions: {
     flexDirection: 'row',
     gap: Spacing.sm,
   },
-  inviteButton: {
+  inviteDecline: {
     flex: 1,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.surfaceElevated,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  inviteButtonAccept: {
+  inviteDeclineText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textMuted,
+  },
+  inviteAccept: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.sm,
     backgroundColor: Colors.primary,
+    alignItems: 'center',
   },
-  inviteButtonDecline: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  inviteButtonTextAccept: {
-    fontSize: Typography.sizes.base,
+  inviteAcceptText: {
+    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.semibold,
     color: Colors.textPrimary,
   },
-  inviteButtonTextDecline: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textMuted,
-  },
-
-  // Records styles
-  recordsControls: {
-    gap: Spacing.md,
-  },
-  controlSection: {
-    gap: Spacing.xs,
-  },
-  controlLabel: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  controlPill: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    alignSelf: 'flex-start',
-  },
-  controlPillText: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textPrimary,
-  },
-  playerSelector: {
+  summaryRow: {
+    flexDirection: 'row',
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: Spacing.md,
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  summaryDivider: {
+    width: 1,
+    backgroundColor: Colors.border,
+  },
+  summaryValue: {
+    fontSize: 32,
+    fontWeight: Typography.weights.bold,
+    color: Colors.primary,
+  },
+  summaryLabel: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+  },
+  compactCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
   },
-  playerSelectorText: {
+  compactCardText: {
+    flex: 1,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textPrimary,
+  },
+  tournamentHighlight: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+  },
+  highlightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  highlightIcon: {
+    width: 24,
+    height: 24,
+  },
+  highlightTitle: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  highlightMeta: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  recordsShortcut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.primary + '40',
+    padding: Spacing.md,
+  },
+  shortcutText: {
+    flex: 1,
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textPrimary,
+  },
+
+  // Records
+  opponentPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+  },
+  opponentName: {
     flex: 1,
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.medium,
     color: Colors.textPrimary,
   },
-  playerSelectorPlaceholder: {
+  opponentPlaceholder: {
     flex: 1,
     fontSize: Typography.sizes.base,
     color: Colors.textMuted,
   },
-  segmentedControl: {
+  loadingBox: {
+    paddingVertical: Spacing.xxl,
+    alignItems: 'center',
+  },
+  recordBox: {
+    backgroundColor: Colors.primary + '20',
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    gap: 4,
+  },
+  recordBig: {
+    fontSize: 40,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+  },
+  recordSmall: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+  },
+  statLabel: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+  },
+  last5Box: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  last5Title: {
+    fontSize: Typography.sizes.xs,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textMuted,
+  },
+  last5Row: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    justifyContent: 'center',
+  },
+  last5Badge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  last5Text: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+  },
+  matchList: {
+    gap: Spacing.xs,
+  },
+  matchItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.sm,
+  },
+  matchBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  matchBadgeText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+  },
+  matchDate: {
+    flex: 1,
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+  },
+
+  // Events
+  filterRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  filterGroup: {
+    flex: 1,
     flexDirection: 'row',
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
@@ -1137,238 +1017,64 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     padding: 2,
   },
-  segment: {
+  filterChip: {
     flex: 1,
-    paddingVertical: Spacing.sm,
+    paddingVertical: 6,
     alignItems: 'center',
     borderRadius: BorderRadius.sm,
   },
-  segmentActive: {
+  filterChipActive: {
     backgroundColor: Colors.primary,
   },
-  segmentText: {
-    fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.medium,
-    color: Colors.textMuted,
-  },
-  segmentTextActive: {
-    color: Colors.textPrimary,
-    fontWeight: Typography.weights.semibold,
-  },
-  loadingContainer: {
-    paddingVertical: Spacing.xxl,
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  loadingText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
-  },
-  statsSection: {
-    gap: Spacing.lg,
-  },
-  vsCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.xl,
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  vsLabel: {
+  filterText: {
     fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textMuted,
-    letterSpacing: 1,
-  },
-  vsName: {
-    fontSize: Typography.sizes.lg,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textPrimary,
-  },
-  recordCard: {
-    backgroundColor: Colors.primary + '20',
-    borderRadius: BorderRadius.md,
-    borderWidth: 2,
-    borderColor: Colors.primary,
-    padding: Spacing.xl,
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  recordValue: {
-    fontSize: 48,
-    fontWeight: Typography.weights.bold,
-    color: Colors.textPrimary,
-  },
-  recordLabel: {
-    fontSize: Typography.sizes.sm,
     fontWeight: Typography.weights.medium,
     color: Colors.textMuted,
   },
-  miniStatsGrid: {
-    flexDirection: 'row',
+  filterTextActive: {
+    color: Colors.textPrimary,
+    fontWeight: Typography.weights.semibold,
+  },
+  eventsList: {
     gap: Spacing.sm,
   },
-  miniStatItem: {
-    flex: 1,
+  eventCard: {
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: Colors.border,
     padding: Spacing.md,
+  },
+  eventHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  miniStatValue: {
-    fontSize: 24,
-    fontWeight: Typography.weights.bold,
-    color: Colors.textPrimary,
-  },
-  miniStatLabel: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.textMuted,
-  },
-  last5Card: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.lg,
     gap: Spacing.sm,
   },
-  last5Label: {
-    fontSize: Typography.sizes.xs,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  eventIcon: {
+    width: 18,
+    height: 18,
   },
-  last5Row: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
-  },
-  last5Badge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  last5BadgeWin: {
-    backgroundColor: Colors.success,
-  },
-  last5BadgeLoss: {
-    backgroundColor: Colors.danger,
-  },
-  last5BadgeText: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.bold,
-    color: Colors.textPrimary,
-  },
-  matchHistoryRow: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  matchResultBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  matchResultWin: {
-    backgroundColor: Colors.success,
-  },
-  matchResultLoss: {
-    backgroundColor: Colors.danger,
-  },
-  matchResultText: {
+  eventTitle: {
     fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.bold,
-    color: Colors.textPrimary,
-  },
-  matchHistoryDate: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
-  },
-
-  // Events styles
-  eventsFilters: {
-    gap: Spacing.sm,
-  },
-  tournamentsList: {
-    gap: Spacing.md,
-  },
-  tournamentCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
-  tournamentCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
-  },
-  tournamentSportIcon: {
-    width: 20,
-    height: 20,
-  },
-  tournamentCardTitle: {
-    fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.semibold,
     color: Colors.textPrimary,
   },
-  tournamentCardMeta: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
+  eventMeta: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
     marginTop: 2,
   },
-  tournamentCardMetaText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
-  },
-  stateBadge: {
-    paddingHorizontal: Spacing.sm,
+  eventBadge: {
+    paddingHorizontal: Spacing.xs,
     paddingVertical: 4,
     borderRadius: BorderRadius.sm,
   },
-  stateBadgeText: {
+  eventBadgeText: {
     fontSize: Typography.sizes.xs,
     fontWeight: Typography.weights.semibold,
   },
-  tournamentCardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  tournamentCardInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  tournamentCardInfoText: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.textMuted,
-  },
-  tournamentCardDate: {
-    fontSize: Typography.sizes.xs,
-    color: Colors.textMuted,
-  },
 
-  // Modal styles
+  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1378,13 +1084,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderTopLeftRadius: BorderRadius.lg,
     borderTopRightRadius: BorderRadius.lg,
-    height: '70%',
+    maxHeight: '70%',
   },
   pickerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: Spacing.lg,
+    padding: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
@@ -1393,33 +1099,23 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.bold,
     color: Colors.textPrimary,
   },
-  pickerClose: {
-    padding: Spacing.xs,
-  },
-  pickerList: {
-    flexGrow: 1,
-    flexShrink: 1,
-  },
   pickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.lg,
+    gap: Spacing.sm,
+    padding: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   pickerItemSelected: {
     backgroundColor: Colors.surfaceElevated,
   },
-  pickerItemInfo: {
-    flex: 1,
-  },
-  pickerItemName: {
+  pickerName: {
     fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
+    fontWeight: Typography.weights.medium,
     color: Colors.textPrimary,
   },
-  pickerItemHandle: {
+  pickerHandle: {
     fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
   },

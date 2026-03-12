@@ -7,13 +7,14 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
 import { Button, UserAvatar, UserName, ScreenLoader, ErrorState, LoadingSpinner } from '@/components';
 import { tournamentsService } from '@/services/tournaments';
-import { Tournament, TournamentGroup, TournamentMatch, TournamentStanding, AmericanoLeaderboardEntry } from '@/types';
+import { Tournament, TournamentGroup, TournamentMatch, TournamentStanding, AmericanoLeaderboardEntry, AmericanoPairLeaderboardEntry } from '@/types';
 import { getSupabaseClient } from '@/template';
 import { useAlert } from '@/template';
 
 const supabase = getSupabaseClient();
 
 type TabType = 'overview' | 'groups' | 'playoffs' | 'matches' | 'rounds' | 'leaderboard' | 'players';
+type LeaderboardViewType = 'players' | 'pairs';
 
 export default function TournamentDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -31,6 +32,8 @@ export default function TournamentDetailScreen() {
   const [playoffMatches, setPlayoffMatches] = useState<TournamentMatch[]>([]);
   const [allMatches, setAllMatches] = useState<TournamentMatch[]>([]);
   const [americanoLeaderboard, setAmericanoLeaderboard] = useState<AmericanoLeaderboardEntry[]>([]);
+  const [americanoPairLeaderboard, setAmericanoPairLeaderboard] = useState<AmericanoPairLeaderboardEntry[]>([]);
+  const [leaderboardView, setLeaderboardView] = useState<LeaderboardViewType>('players');
   const [completingTournament, setCompletingTournament] = useState(false);
   const [ratingDeltas, setRatingDeltas] = useState<Array<{ userId: string; displayName: string; delta: number }> | null>(null);
   const [deletingTournament, setDeletingTournament] = useState(false);
@@ -108,12 +111,16 @@ export default function TournamentDetailScreen() {
 
     try {
       if (tournament.type === 'americano') {
-        const [matchesData, leaderboardData] = await Promise.all([
+        const [matchesData, leaderboardData, pairLeaderboardData] = await Promise.all([
           tournamentsService.getMatchesByTournament(id),
           tournamentsService.getAmericanoLeaderboard(id),
+          tournament.mode === 'doubles' 
+            ? tournamentsService.getAmericanoPairLeaderboard(id)
+            : Promise.resolve([]),
         ]);
         setAllMatches(matchesData);
         setAmericanoLeaderboard(leaderboardData);
+        setAmericanoPairLeaderboard(pairLeaderboardData);
       } else {
         const [groupsData, matchesData] = await Promise.all([
           tournamentsService.getGroupsByTournament(id),
@@ -464,49 +471,141 @@ export default function TournamentDetailScreen() {
       );
     }
 
+    const showPairToggle = tournament?.mode === 'doubles' && americanoPairLeaderboard.length > 0;
+
     return (
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.standingsCard}>
-          <Text style={styles.cardTitle}>Leaderboard</Text>
-          <View style={styles.standingsTable}>
-            <View style={styles.standingsHeader}>
-              <Text style={[styles.standingsHeaderText, { flex: 2 }]}>Player</Text>
-              <Text style={styles.standingsHeaderText}>Points</Text>
-              <Text style={styles.standingsHeaderText}>Diff</Text>
-              <Text style={styles.standingsHeaderText}>Played</Text>
-            </View>
-            {americanoLeaderboard.map((entry, idx) => (
-              <View key={entry.participant.userId} style={styles.standingsRow}>
-                <View style={[
-                  styles.standingsRank,
-                  idx < 3 && { backgroundColor: Colors.accentGold + '30' },
-                ]}>
-                  <Text style={[
-                    styles.standingsRankText,
-                    idx < 3 && { color: Colors.accentGold },
-                  ]}>
-                    {idx + 1}
-                  </Text>
-                </View>
-                <Text style={[styles.standingsPlayerText, { flex: 2 }]} numberOfLines={1}>
-                  {entry.participant.displayName}
-                </Text>
-                <Text style={styles.standingsStatText}>{entry.totalPointsFor}</Text>
-                <Text style={[
-                  styles.standingsStatText,
-                  entry.pointDiff > 0 && { color: Colors.success },
-                  entry.pointDiff < 0 && { color: Colors.danger },
-                ]}>
-                  {entry.pointDiff > 0 ? '+' : ''}{entry.pointDiff}
-                </Text>
-                <Text style={styles.standingsStatText}>{entry.matchesPlayed}</Text>
+        {/* View Toggle */}
+        {showPairToggle && (
+          <View style={styles.viewToggle}>
+            <Pressable
+              style={[
+                styles.viewToggleButton,
+                leaderboardView === 'players' && styles.viewToggleButtonActive,
+              ]}
+              onPress={() => setLeaderboardView('players')}
+            >
+              <Text style={[
+                styles.viewToggleText,
+                leaderboardView === 'players' && styles.viewToggleTextActive,
+              ]}>
+                Players
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.viewToggleButton,
+                leaderboardView === 'pairs' && styles.viewToggleButtonActive,
+              ]}
+              onPress={() => setLeaderboardView('pairs')}
+            >
+              <Text style={[
+                styles.viewToggleText,
+                leaderboardView === 'pairs' && styles.viewToggleTextActive,
+              ]}>
+                Pairs
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Player View */}
+        {leaderboardView === 'players' && (
+          <View style={styles.standingsCard}>
+            <Text style={styles.cardTitle}>Individual Leaderboard</Text>
+            <View style={styles.standingsTable}>
+              <View style={styles.standingsHeader}>
+                <Text style={[styles.standingsHeaderText, { flex: 2 }]}>Player</Text>
+                <Text style={styles.standingsHeaderText}>Points</Text>
+                <Text style={styles.standingsHeaderText}>Diff</Text>
+                <Text style={styles.standingsHeaderText}>Played</Text>
               </View>
-            ))}</View>
-        </View>
+              {americanoLeaderboard.map((entry, idx) => (
+                <View key={entry.participant.userId} style={styles.standingsRow}>
+                  <View style={[
+                    styles.standingsRank,
+                    idx < 3 && { backgroundColor: Colors.accentGold + '30' },
+                  ]}>
+                    <Text style={[
+                      styles.standingsRankText,
+                      idx < 3 && { color: Colors.accentGold },
+                    ]}>
+                      {idx + 1}
+                    </Text>
+                  </View>
+                  <Text style={[styles.standingsPlayerText, { flex: 2 }]} numberOfLines={1}>
+                    {entry.participant.displayName}
+                  </Text>
+                  <Text style={styles.standingsStatText}>{entry.totalPointsFor}</Text>
+                  <Text style={[
+                    styles.standingsStatText,
+                    entry.pointDiff > 0 && { color: Colors.success },
+                    entry.pointDiff < 0 && { color: Colors.danger },
+                  ]}>
+                    {entry.pointDiff > 0 ? '+' : ''}{entry.pointDiff}
+                  </Text>
+                  <Text style={styles.standingsStatText}>{entry.matchesPlayed}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Pair View */}
+        {leaderboardView === 'pairs' && americanoPairLeaderboard.length > 0 && (
+          <View style={styles.standingsCard}>
+            <Text style={styles.cardTitle}>Pair Leaderboard</Text>
+            <View style={styles.standingsTable}>
+              <View style={styles.standingsHeader}>
+                <Text style={[styles.standingsHeaderText, { flex: 2 }]}>Pair</Text>
+                <Text style={styles.standingsHeaderText}>Points</Text>
+                <Text style={styles.standingsHeaderText}>Diff</Text>
+                <Text style={styles.standingsHeaderText}>Played</Text>
+              </View>
+              {americanoPairLeaderboard.map((entry, idx) => {
+                const [p1, p2] = entry.participants;
+                const pairName = `${p1.displayName.split(' ')[0]} / ${p2.displayName.split(' ')[0]}`;
+                
+                return (
+                  <View key={entry.pairKey} style={styles.standingsRow}>
+                    <View style={[
+                      styles.standingsRank,
+                      idx < 3 && { backgroundColor: Colors.accentGold + '30' },
+                    ]}>
+                      <Text style={[
+                        styles.standingsRankText,
+                        idx < 3 && { color: Colors.accentGold },
+                      ]}>
+                        {idx + 1}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 2 }}>
+                      <Text style={styles.standingsPlayerText} numberOfLines={1}>
+                        {pairName}
+                      </Text>
+                      <Text style={styles.pairSubtext} numberOfLines={1}>
+                        @{p1.username} & @{p2.username}
+                      </Text>
+                    </View>
+                    <Text style={styles.standingsStatText}>{entry.totalPointsFor}</Text>
+                    <Text style={[
+                      styles.standingsStatText,
+                      entry.pointDiff > 0 && { color: Colors.success },
+                      entry.pointDiff < 0 && { color: Colors.danger },
+                    ]}>
+                      {entry.pointDiff > 0 ? '+' : ''}{entry.pointDiff}
+                    </Text>
+                    <Text style={styles.standingsStatText}>{entry.matchesPlayed}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {/* Complete Tournament Button */}
         {tournament && tournament.state === 'in_progress' && userId === tournament.createdByUserId && (
@@ -1360,6 +1459,38 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.sm,
     color: Colors.success,
     fontWeight: Typography.weights.medium,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 4,
+    gap: 4,
+  },
+  viewToggleButton: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    borderRadius: BorderRadius.sm,
+  },
+  viewToggleButtonActive: {
+    backgroundColor: Colors.primary,
+  },
+  viewToggleText: {
+    fontSize: Typography.sizes.sm,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textMuted,
+  },
+  viewToggleTextActive: {
+    color: Colors.textPrimary,
+    fontWeight: Typography.weights.semibold,
+  },
+  pairSubtext: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+    marginTop: 2,
   },
   ratingSummaryCard: {
     backgroundColor: Colors.surfaceElevated,

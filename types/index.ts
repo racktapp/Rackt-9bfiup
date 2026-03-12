@@ -224,3 +224,13 @@ export interface AmericanoLeaderboardEntry {
   matchesPlayed: number;
   rank: number;
 }
+
+export interface AmericanoPairLeaderboardEntry {
+  pairKey: string;
+  participants: [TournamentParticipant, TournamentParticipant];
+  totalPointsFor: number;
+  totalPointsAgainst: number;
+  pointDiff: number;
+  matchesPlayed: number;
+  rank: number;
+}

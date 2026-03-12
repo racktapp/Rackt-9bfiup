@@ -8,7 +8,8 @@ import {
   TournamentTeam,
   TournamentStanding,
   AmericanoRound,
-  AmericanoLeaderboardEntry
+  AmericanoLeaderboardEntry,
+  AmericanoPairLeaderboardEntry
 } from '@/types';
 import { Sport } from '@/constants/config';
 
@@ -974,6 +975,110 @@ export const tournamentsService = {
 
     // Calculate point diff and sort
     const sorted = Array.from(leaderboard.values()).map(entry => ({
+      ...entry,
+      pointDiff: entry.totalPointsFor - entry.totalPointsAgainst,
+    })).sort((a, b) => {
+      if (b.totalPointsFor !== a.totalPointsFor) {
+        return b.totalPointsFor - a.totalPointsFor;
+      }
+      return b.pointDiff - a.pointDiff;
+    });
+
+    // Assign ranks
+    sorted.forEach((entry, idx) => {
+      entry.rank = idx + 1;
+    });
+
+    return sorted;
+  },
+
+  async getAmericanoPairLeaderboard(tournamentId: string): Promise<AmericanoPairLeaderboardEntry[]> {
+    const tournament = await this.getTournamentById(tournamentId);
+    const matches = await this.getMatchesByTournament(tournamentId);
+
+    // Helper function to create stable pair key (sorted userIds)
+    const createPairKey = (userId1: string, userId2: string): string => {
+      return [userId1, userId2].sort().join('_');
+    };
+
+    // Helper function to find participants by userId
+    const findParticipant = (userId: string): TournamentParticipant | null => {
+      return tournament.participants.find(p => p.userId === userId) || null;
+    };
+
+    // Initialize pair leaderboard
+    const pairMap: Map<string, AmericanoPairLeaderboardEntry> = new Map();
+
+    // Process confirmed matches
+    for (const match of matches) {
+      if (match.status !== 'confirmed' || match.score.length === 0) continue;
+
+      const pointsA = match.score[0].a;
+      const pointsB = match.score[0].b;
+      const teamAUserIds = match.teamA.memberUserIds;
+      const teamBUserIds = match.teamB.memberUserIds;
+
+      // Process Team A (must have exactly 2 players for doubles)
+      if (teamAUserIds.length === 2) {
+        const pairKey = createPairKey(teamAUserIds[0], teamAUserIds[1]);
+        
+        if (!pairMap.has(pairKey)) {
+          const participant1 = findParticipant(teamAUserIds[0]);
+          const participant2 = findParticipant(teamAUserIds[1]);
+          
+          if (participant1 && participant2) {
+            pairMap.set(pairKey, {
+              pairKey,
+              participants: [participant1, participant2],
+              totalPointsFor: 0,
+              totalPointsAgainst: 0,
+              pointDiff: 0,
+              matchesPlayed: 0,
+              rank: 0,
+            });
+          }
+        }
+
+        const pairEntry = pairMap.get(pairKey);
+        if (pairEntry) {
+          pairEntry.totalPointsFor += pointsA;
+          pairEntry.totalPointsAgainst += pointsB;
+          pairEntry.matchesPlayed++;
+        }
+      }
+
+      // Process Team B (must have exactly 2 players for doubles)
+      if (teamBUserIds.length === 2) {
+        const pairKey = createPairKey(teamBUserIds[0], teamBUserIds[1]);
+        
+        if (!pairMap.has(pairKey)) {
+          const participant1 = findParticipant(teamBUserIds[0]);
+          const participant2 = findParticipant(teamBUserIds[1]);
+          
+          if (participant1 && participant2) {
+            pairMap.set(pairKey, {
+              pairKey,
+              participants: [participant1, participant2],
+              totalPointsFor: 0,
+              totalPointsAgainst: 0,
+              pointDiff: 0,
+              matchesPlayed: 0,
+              rank: 0,
+            });
+          }
+        }
+
+        const pairEntry = pairMap.get(pairKey);
+        if (pairEntry) {
+          pairEntry.totalPointsFor += pointsB;
+          pairEntry.totalPointsAgainst += pointsA;
+          pairEntry.matchesPlayed++;
+        }
+      }
+    }
+
+    // Calculate point diff and sort
+    const sorted = Array.from(pairMap.values()).map(entry => ({
       ...entry,
       pointDiff: entry.totalPointsFor - entry.totalPointsAgainst,
     })).sort((a, b) => {

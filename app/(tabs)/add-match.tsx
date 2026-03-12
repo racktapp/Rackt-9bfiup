@@ -635,6 +635,7 @@ const styles = StyleSheet.create({
   playersGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    alignItems: 'center',
     gap: Spacing.sm,
   },
   playerChip: {

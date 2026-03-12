@@ -1071,7 +1071,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderTopLeftRadius: BorderRadius.lg,
     borderTopRightRadius: BorderRadius.lg,
-    maxHeight: '70%',
+    height: '70%',
   },
   pickerHeader: {
     flexDirection: 'row',
@@ -1090,7 +1090,8 @@ const styles = StyleSheet.create({
     padding: Spacing.xs,
   },
   pickerList: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
   },
   pickerItem: {
     flexDirection: 'row',

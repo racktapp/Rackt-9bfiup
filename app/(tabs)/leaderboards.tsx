@@ -35,6 +35,7 @@ export default function LeaderboardsScreen() {
 
   const [friends, setFriends] = useState<any[]>([]);
   const [selectedOpponent, setSelectedOpponent] = useState<string | null>(null);
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [showOpponentPicker, setShowOpponentPicker] = useState(false);
   const [headToHeadStats, setHeadToHeadStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(false);
@@ -333,12 +334,13 @@ export default function LeaderboardsScreen() {
 
         {/* Selectors Row */}
         <View style={styles.selectorsRow}>
-          <View style={styles.groupPill}>
+          <Pressable style={styles.groupPill} onPress={() => setShowGroupPicker(true)}>
             <MaterialIcons name="group" size={14} color={Colors.textPrimary} />
             <Text style={styles.groupText} numberOfLines={1}>
               {currentGroup?.name || 'Group'}
             </Text>
-          </View>
+            <MaterialIcons name="arrow-drop-down" size={18} color={Colors.textPrimary} />
+          </Pressable>
           
           {activeTab === 'head-to-head' && (
             <Pressable style={styles.opponentPill} onPress={() => setShowOpponentPicker(true)}>
@@ -569,6 +571,49 @@ export default function LeaderboardsScreen() {
           )
         )}
       </ScrollView>
+
+      {/* Group Picker Modal */}
+      <Modal
+        visible={showGroupPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowGroupPicker(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowGroupPicker(false)}>
+          <Pressable
+            style={[styles.pickerModal, { paddingBottom: insets.bottom + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Select Group</Text>
+              <Pressable onPress={() => setShowGroupPicker(false)}>
+                <MaterialIcons name="close" size={24} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {groups.map(group => (
+                <Pressable
+                  key={group.id}
+                  style={[
+                    styles.pickerItem,
+                    selectedGroup === group.id && styles.pickerItemSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedGroup(group.id);
+                    setShowGroupPicker(false);
+                  }}
+                >
+                  <MaterialIcons name="group" size={24} color={Colors.primary} />
+                  <Text style={styles.pickerName}>{group.name}</Text>
+                  {selectedGroup === group.id && (
+                    <MaterialIcons name="check-circle" size={20} color={Colors.primary} />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Opponent Picker Modal */}
       <Modal

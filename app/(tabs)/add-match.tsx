@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -30,6 +30,7 @@ export default function AddMatchScreen() {
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [friends, setFriends] = useState<any[]>([]);
   const [selectedOpponent, setSelectedOpponent] = useState<string | null>(null);
+  const [showOpponentPicker, setShowOpponentPicker] = useState(false);
   const [isLoadingGroups, setIsLoadingGroups] = useState(true);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
@@ -241,6 +242,10 @@ export default function AddMatchScreen() {
     }
   };
 
+  const selectedFriend = selectedOpponent 
+    ? friends.find(f => f.friend.id === selectedOpponent)?.friend 
+    : null;
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -357,34 +362,30 @@ export default function AddMatchScreen() {
                 <Text style={styles.helperText}>Add friends to play 1v1 matches</Text>
               </View>
             ) : (
-              <View style={styles.friendsList}>
-                {friends.map(friendship => (
-                  <Pressable
-                    key={friendship.id}
-                    style={[
-                      styles.friendCard,
-                      selectedOpponent === friendship.friend.id && styles.friendCardSelected,
-                    ]}
-                    onPress={() => setSelectedOpponent(friendship.friend.id)}
-                  >
+              <Pressable
+                style={styles.dropdownButton}
+                onPress={() => setShowOpponentPicker(true)}
+              >
+                {selectedFriend ? (
+                  <View style={styles.dropdownSelected}>
                     <UserAvatar
-                      name={friendship.friend.displayName || friendship.friend.username}
-                      avatarUrl={friendship.friend.avatarUrl}
-                      size={40}
+                      name={selectedFriend.displayName || selectedFriend.username}
+                      avatarUrl={selectedFriend.avatarUrl}
+                      size={32}
                     />
-                    <View style={styles.friendInfo}>
+                    <View style={styles.dropdownSelectedInfo}>
                       <UserName
-                        profile={friendship.friend}
-                        displayNameStyle={styles.friendName}
-                        handleStyle={styles.friendHandle}
+                        profile={selectedFriend}
+                        displayNameStyle={styles.dropdownSelectedName}
+                        handleStyle={styles.dropdownSelectedHandle}
                       />
                     </View>
-                    {selectedOpponent === friendship.friend.id && (
-                      <MaterialIcons name="check-circle" size={24} color={Colors.primary} />
-                    )}
-                  </Pressable>
-                ))}
-              </View>
+                  </View>
+                ) : (
+                  <Text style={styles.dropdownPlaceholder}>Choose opponent</Text>
+                )}
+                <MaterialIcons name="arrow-drop-down" size={24} color={Colors.textMuted} />
+              </Pressable>
             )}
           </View>
         )}
@@ -413,8 +414,7 @@ export default function AddMatchScreen() {
                 </Text>
               </Pressable>
             ))}
-            </View>
-          {/* This closing tag was misplaced and caused the error. It should not be here. */}
+          </View>
         </View>
 
         {/* Format (only for group mode) */}
@@ -546,7 +546,7 @@ export default function AddMatchScreen() {
                 <Text style={styles.teamLabel}>{matchMode === '1v1' ? 'Opponent' : 'Team B'}</Text>
                 {matchMode === '1v1' && selectedOpponent && (
                   <Text style={styles.teamPlayers}>
-                    {friends.find(f => f.friend.id === selectedOpponent)?.friend.displayName?.split(' ')[0] || 'Opponent'}
+                    {selectedFriend?.displayName?.split(' ')[0] || 'Opponent'}
                   </Text>
                 )}
                 {matchMode === 'group' && (
@@ -645,6 +645,65 @@ export default function AddMatchScreen() {
           icon={submitting ? <LoadingSpinner size={20} /> : undefined}
         />
       </ScrollView>
+
+      {/* Opponent Picker Modal */}
+      <Modal
+        visible={showOpponentPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowOpponentPicker(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowOpponentPicker(false)}
+        >
+          <Pressable
+            style={[styles.pickerModal, { paddingBottom: insets.bottom + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Choose Opponent</Text>
+              <Pressable
+                onPress={() => setShowOpponentPicker(false)}
+                style={styles.pickerClose}
+              >
+                <MaterialIcons name="close" size={24} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
+              {friends.map(friendship => (
+                <Pressable
+                  key={friendship.id}
+                  style={[
+                    styles.pickerItem,
+                    selectedOpponent === friendship.friend.id && styles.pickerItemSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedOpponent(friendship.friend.id);
+                    setShowOpponentPicker(false);
+                  }}
+                >
+                  <UserAvatar
+                    name={friendship.friend.displayName || friendship.friend.username}
+                    avatarUrl={friendship.friend.avatarUrl}
+                    size={40}
+                  />
+                  <View style={styles.pickerItemInfo}>
+                    <UserName
+                      profile={friendship.friend}
+                      displayNameStyle={styles.pickerItemName}
+                      handleStyle={styles.pickerItemHandle}
+                    />
+                  </View>
+                  {selectedOpponent === friendship.friend.id && (
+                    <MaterialIcons name="check-circle" size={24} color={Colors.primary} />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -970,33 +1029,89 @@ const styles = StyleSheet.create({
     fontWeight: Typography.weights.semibold,
     color: Colors.textMuted,
   },
-  friendsList: {
-    gap: Spacing.sm,
-  },
-  friendCard: {
+  dropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    justifyContent: 'space-between',
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
+    minHeight: 56,
   },
-  friendCardSelected: {
-    backgroundColor: Colors.surfaceElevated,
-    borderColor: Colors.primary,
-    borderWidth: 2,
-  },
-  friendInfo: {
+  dropdownSelected: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
     flex: 1,
   },
-  friendName: {
+  dropdownSelectedInfo: {
+    flex: 1,
+  },
+  dropdownSelectedName: {
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.semibold,
     color: Colors.textPrimary,
   },
-  friendHandle: {
+  dropdownSelectedHandle: {
+    fontSize: Typography.sizes.sm,
+    color: Colors.textMuted,
+  },
+  dropdownPlaceholder: {
+    fontSize: Typography.sizes.base,
+    color: Colors.textMuted,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  pickerModal: {
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: BorderRadius.lg,
+    borderTopRightRadius: BorderRadius.lg,
+    maxHeight: '70%',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  pickerTitle: {
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
+    color: Colors.textPrimary,
+  },
+  pickerClose: {
+    padding: Spacing.xs,
+  },
+  pickerList: {
+    flex: 1,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  pickerItemSelected: {
+    backgroundColor: Colors.surfaceElevated,
+  },
+  pickerItemInfo: {
+    flex: 1,
+  },
+  pickerItemName: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.textPrimary,
+  },
+  pickerItemHandle: {
     fontSize: Typography.sizes.sm,
     color: Colors.textMuted,
   },

@@ -291,7 +291,7 @@ export default function MatchDetailScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: canConfirm ? insets.bottom + 100 : insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Poster Preview */}
@@ -306,70 +306,22 @@ export default function MatchDetailScreen() {
           {posterData && <MatchPoster ref={posterRef} data={posterData} size="full" />}
         </View>
 
-        {/* Confirmation Card */}
-        <View style={styles.confirmationCard}>
-          <Text style={styles.confirmationTitle}>Confirmation</Text>
-          
-          {isConfirmed ? (
-            <View style={styles.confirmedBadge}>
-              <MaterialIcons name="check-circle" size={24} color={Colors.success} />
-              <Text style={styles.confirmedText}>Confirmed ✓</Text>
-            </View>
-          ) : hasIncompleteSides ? (
-            <View style={styles.errorBanner}>
-              <MaterialIcons name="error-outline" size={24} color={Colors.danger} />
-              <Text style={styles.errorText}>
-                Match data incomplete (missing teams). Please contact support.
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.pendingSection}>
-              <View style={styles.statusRow}>
-                <MaterialIcons name="schedule" size={20} color={Colors.warning} />
-                <Text style={styles.pendingText}>Pending confirmation</Text>
-              </View>
-              
-              {canConfirm ? (
-                <>
-                  <Button
-                    title={confirming ? 'Confirming...' : 'Confirm Match'}
-                    onPress={handleConfirm}
-                    disabled={confirming}
-                    fullWidth
-                    style={styles.confirmButton}
-                    icon={confirming ? <LoadingSpinner size={20} /> : undefined}
-                  />
-                  <Text style={styles.helperText}>
-                    {match.format === 'singles' 
-                      ? 'Opponent confirms the match.' 
-                      : 'Any one opponent can confirm.'}
-                  </Text>
-                </>
-              ) : isCreator ? (
-                <View style={styles.infoMessage}>
-                  <MaterialIcons name="info-outline" size={18} color={Colors.textMuted} />
-                  <Text style={styles.infoMessageText}>
-                    Waiting for opponent confirmation
-                  </Text>
-                </View>
-              ) : mySide === creatorSide ? (
-                <View style={styles.infoMessage}>
-                  <MaterialIcons name="info-outline" size={18} color={Colors.textMuted} />
-                  <Text style={styles.infoMessageText}>
-                    Only opponents can confirm
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.infoMessage}>
-                  <MaterialIcons name="info-outline" size={18} color={Colors.textMuted} />
-                  <Text style={styles.infoMessageText}>
-                    You cannot confirm this match
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-        </View>
+        {/* Status Indicator */}
+        {isConfirmed && (
+          <View style={styles.confirmedBadge}>
+            <MaterialIcons name="check-circle" size={24} color={Colors.success} />
+            <Text style={styles.confirmedText}>Match Confirmed ✓</Text>
+          </View>
+        )}
+        
+        {hasIncompleteSides && !isConfirmed && (
+          <View style={styles.errorBanner}>
+            <MaterialIcons name="error-outline" size={24} color={Colors.danger} />
+            <Text style={styles.errorText}>
+              Match data incomplete (missing teams). Please contact support.
+            </Text>
+          </View>
+        )}
 
         {/* Share Button */}
         <Button
@@ -484,6 +436,19 @@ export default function MatchDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Bottom Confirm Button */}
+      {canConfirm && (
+        <View style={[styles.bottomActionBar, { paddingBottom: insets.bottom + 16 }]}>
+          <Button
+            title={confirming ? 'Confirming...' : 'Confirm Match'}
+            onPress={handleConfirm}
+            disabled={confirming}
+            fullWidth
+            icon={confirming ? <LoadingSpinner size={20} /> : undefined}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -542,65 +507,38 @@ const styles = StyleSheet.create({
     top: -10000,
     opacity: 0,
   },
-  confirmationCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
-  confirmationTitle: {
-    fontSize: Typography.sizes.lg,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.textPrimary,
-  },
+
   confirmedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.sm,
     padding: Spacing.md,
     backgroundColor: 'rgba(34, 197, 94, 0.1)',
     borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.success,
   },
   confirmedText: {
     fontSize: Typography.sizes.base,
     fontWeight: Typography.weights.semibold,
     color: Colors.success,
   },
-  pendingSection: {
-    gap: Spacing.md,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  pendingText: {
-    fontSize: Typography.sizes.base,
-    color: Colors.textMuted,
-    fontWeight: Typography.weights.medium,
-  },
-  confirmButton: {
-    marginTop: Spacing.xs,
-  },
-  helperText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
-    textAlign: 'center',
-  },
-  infoMessage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    padding: Spacing.md,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: BorderRadius.md,
-  },
-  infoMessageText: {
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
-    flex: 1,
+  bottomActionBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.background,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
   },
   infoCard: {
     backgroundColor: Colors.surface,

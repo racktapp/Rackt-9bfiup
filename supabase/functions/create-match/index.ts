@@ -10,6 +10,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace('Bearer ', '');
 
+    // Client for auth verification
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -24,6 +25,12 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Admin client for database operations (bypasses RLS)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
     const { groupId, sport, format, type, teamA, teamB, sets, winnerTeam } = await req.json();
 
     // groupId is now optional for standalone 1v1 matches
@@ -36,7 +43,7 @@ Deno.serve(async (req) => {
 
     // If groupId is provided, verify user is member
     if (groupId) {
-      const { data: membership } = await supabaseClient
+      const { data: membership } = await supabaseAdmin
         .from('group_members')
         .select('id')
         .eq('group_id', groupId)
@@ -52,7 +59,7 @@ Deno.serve(async (req) => {
     }
 
     // Create match (group_id can be null for standalone matches)
-    const { data: match, error: matchError } = await supabaseClient
+    const { data: match, error: matchError } = await supabaseAdmin
       .from('matches')
       .insert({
         group_id: groupId || null,
@@ -88,13 +95,13 @@ Deno.serve(async (req) => {
       })),
     ];
 
-    const { error: playersError } = await supabaseClient
+    const { error: playersError } = await supabaseAdmin
       .from('match_players')
       .insert(playerInserts);
 
     if (playersError) {
       console.error('Error adding players:', playersError);
-      await supabaseClient.from('matches').delete().eq('id', match.id);
+      await supabaseAdmin.from('matches').delete().eq('id', match.id);
       return new Response(JSON.stringify({ error: playersError.message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -110,13 +117,13 @@ Deno.serve(async (req) => {
       tiebreak: set.tiebreak || null,
     }));
 
-    const { error: setsError } = await supabaseClient
+    const { error: setsError } = await supabaseAdmin
       .from('match_sets')
       .insert(setInserts);
 
     if (setsError) {
       console.error('Error adding sets:', setsError);
-      await supabaseClient.from('matches').delete().eq('id', match.id);
+      await supabaseAdmin.from('matches').delete().eq('id', match.id);
       return new Response(JSON.stringify({ error: setsError.message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

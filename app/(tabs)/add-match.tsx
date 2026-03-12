@@ -583,9 +583,11 @@ export default function AddMatchScreen() {
                           <MaterialIcons name="add" size={20} color={Colors.textPrimary} />
                         </Pressable>
                       </View>
-                      {setWinner === 'A' && (
-                        <MaterialIcons name="check-circle" size={16} color={Colors.success} style={styles.setWinnerIcon} />
-                      )}
+                      <View style={styles.setWinnerIconContainer}>
+                        {setWinner === 'A' && (
+                          <MaterialIcons name="check-circle" size={16} color={Colors.success} />
+                        )}
+                      </View>
                     </View>
 
                     <Text style={styles.scoreDivider}>–</Text>
@@ -606,9 +608,11 @@ export default function AddMatchScreen() {
                           <MaterialIcons name="add" size={20} color={Colors.textPrimary} />
                         </Pressable>
                       </View>
-                      {setWinner === 'B' && (
-                        <MaterialIcons name="check-circle" size={16} color={Colors.success} style={styles.setWinnerIcon} />
-                      )}
+                      <View style={styles.setWinnerIconContainer}>
+                        {setWinner === 'B' && (
+                          <MaterialIcons name="check-circle" size={16} color={Colors.success} />
+                        )}
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -941,8 +945,11 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontWeight: Typography.weights.bold,
   },
-  setWinnerIcon: {
+  setWinnerIconContainer: {
+    height: 16,
     marginTop: Spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addSetButton: {
     flexDirection: 'row',

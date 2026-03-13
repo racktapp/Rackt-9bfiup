@@ -58,10 +58,10 @@ export default function LeaderboardsScreen() {
   }, [selectedGroup, selectedSport, period, activeTab]);
 
   useEffect(() => {
-    if (selectedGroup && selectedOpponent && activeTab === 'head-to-head') {
+    if (selectedOpponent && activeTab === 'head-to-head') {
       loadHeadToHeadStats();
     }
-  }, [selectedGroup, selectedOpponent, period, activeTab]);
+  }, [selectedOpponent, selectedSport, period, activeTab]);
 
   const loadUserId = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -102,10 +102,11 @@ export default function LeaderboardsScreen() {
   };
 
   const loadHeadToHeadStats = async () => {
-    if (!userId || !selectedGroup || !selectedOpponent) return;
+    if (!userId || !selectedOpponent) return;
 
     setLoadingStats(true);
     try {
+      // Get ALL matches where current user participated
       const { data: matchPlayers } = await supabase
         .from('match_players')
         .select(`
@@ -128,10 +129,10 @@ export default function LeaderboardsScreen() {
         return;
       }
 
+      // Filter only confirmed matches with selected sport (no group filter)
       const relevantMatches = matchPlayers
         .filter((mp: any) => 
           mp.match?.status === 'confirmed' &&
-          mp.match?.group_id === selectedGroup &&
           mp.match?.sport === selectedSport
         )
         .map((mp: any) => mp.match)
@@ -333,7 +334,7 @@ export default function LeaderboardsScreen() {
         </View>
 
         {/* Selectors Row */}
-        <View style={styles.selectorsRow}>
+        {activeTab === 'group-ranking' ? (
           <Pressable style={styles.groupPill} onPress={() => setShowGroupPicker(true)}>
             <MaterialIcons name="group" size={14} color={Colors.textPrimary} />
             <Text style={styles.groupText} numberOfLines={1}>
@@ -341,27 +342,28 @@ export default function LeaderboardsScreen() {
             </Text>
             <MaterialIcons name="arrow-drop-down" size={18} color={Colors.textPrimary} />
           </Pressable>
-          
-          {activeTab === 'head-to-head' && (
-            <Pressable style={styles.opponentPill} onPress={() => setShowOpponentPicker(true)}>
-              {selectedFriend ? (
-                <>
-                  <UserAvatar
-                    name={selectedFriend.displayName || selectedFriend.username}
-                    avatarUrl={selectedFriend.avatarUrl}
-                    size={20}
-                  />
+        ) : (
+          <Pressable style={styles.opponentPill} onPress={() => setShowOpponentPicker(true)}>
+            {selectedFriend ? (
+              <>
+                <UserAvatar
+                  name={selectedFriend.displayName || selectedFriend.username}
+                  avatarUrl={selectedFriend.avatarUrl}
+                  size={24}
+                />
+                <View style={{ flex: 1 }}>
                   <Text style={styles.opponentText} numberOfLines={1}>
                     {selectedFriend.displayName || selectedFriend.username}
                   </Text>
-                </>
-              ) : (
-                <Text style={styles.opponentPlaceholder}>Choose player</Text>
-              )}
-              <MaterialIcons name="arrow-drop-down" size={18} color={Colors.textMuted} />
-            </Pressable>
-          )}
-        </View>
+                  <Text style={styles.opponentSubtext}>All matches</Text>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.opponentPlaceholder}>Choose opponent</Text>
+            )}
+            <MaterialIcons name="arrow-drop-down" size={18} color={Colors.textMuted} />
+          </Pressable>
+        )}
 
         {/* Mini Controls */}
         <View style={styles.miniControls}>
@@ -726,12 +728,8 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontWeight: Typography.weights.semibold,
   },
-  selectorsRow: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
-  },
+
   groupPill: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
@@ -747,27 +745,30 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   opponentPill: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
-    backgroundColor: Colors.surfaceElevated,
+    gap: Spacing.sm,
+    backgroundColor: Colors.primary,
     borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
   },
   opponentText: {
-    flex: 1,
     fontSize: Typography.sizes.sm,
-    fontWeight: Typography.weights.medium,
+    fontWeight: Typography.weights.semibold,
     color: Colors.textPrimary,
+  },
+  opponentSubtext: {
+    fontSize: Typography.sizes.xs,
+    color: Colors.textMuted,
+    marginTop: 2,
   },
   opponentPlaceholder: {
     flex: 1,
-    fontSize: Typography.sizes.sm,
-    color: Colors.textMuted,
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.medium,
+    color: Colors.textPrimary,
+    opacity: 0.6,
   },
   miniControls: {
     flexDirection: 'row',

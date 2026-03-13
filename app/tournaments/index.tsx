@@ -28,6 +28,7 @@ export default function TournamentsHomeScreen() {
   const [activeTournaments, setActiveTournaments] = useState<Tournament[]>([]);
   const [completedTournaments, setCompletedTournaments] = useState<Tournament[]>([]);
   const [pendingInvites, setPendingInvites] = useState<TournamentInvite[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
   const [isLoadingInitial, setIsLoadingInitial] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +47,7 @@ export default function TournamentsHomeScreen() {
   useEffect(() => {
     if (userId) {
       loadTournaments();
+      loadGroups();
     }
   }, [userId]);
 
@@ -78,11 +80,21 @@ export default function TournamentsHomeScreen() {
     }
   };
 
+  const loadGroups = async () => {
+    if (!userId) return;
+    try {
+      const groupsData = await getUserGroups(userId);
+      setGroups(groupsData);
+    } catch (err: any) {
+      console.error('Error loading groups:', err);
+    }
+  };
+
 
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadTournaments();
+    await Promise.all([loadTournaments(), loadGroups()]);
     setRefreshing(false);
   }, [userId]);
 

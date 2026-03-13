@@ -100,6 +100,53 @@ export default function GroupDetailScreen() {
     setRefreshing(false);
   };
 
+  // Filtered and sorted matches
+  const filteredMatches = useMemo(() => {
+    let filtered = [...matches];
+
+    // Apply type filter
+    if (matchFilter !== 'all') {
+      filtered = filtered.filter(m => m.type === matchFilter);
+    }
+
+    // Apply sport filter
+    if (matchSportFilter !== 'all') {
+      filtered = filtered.filter(m => m.sport === matchSportFilter);
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.createdAt || a.created_at).getTime();
+      const dateB = new Date(b.createdAt || b.created_at).getTime();
+      return matchSort === 'newest' ? dateB - dateA : dateA - dateB;
+    });
+
+    return filtered;
+  }, [matches, matchFilter, matchSportFilter, matchSort]);
+
+  // Filtered and sorted tournaments
+  const filteredTournaments = useMemo(() => {
+    let filtered = [...tournaments];
+
+    // Apply status filter
+    if (tournamentFilter === 'active') {
+      filtered = filtered.filter(t =>
+        t.state === 'draft' || t.state === 'inviting' || t.state === 'locked' || t.state === 'in_progress'
+      );
+    } else if (tournamentFilter === 'completed') {
+      filtered = filtered.filter(t => t.state === 'completed');
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
+      return tournamentSort === 'newest' ? dateB - dateA : dateA - dateB;
+    });
+
+    return filtered;
+  }, [tournaments, tournamentFilter, tournamentSort]);
+
   if (!userId || !id) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -137,53 +184,6 @@ export default function GroupDetailScreen() {
   }
 
   const isOwner = group.ownerId === userId;
-
-  // Filtered and sorted matches
-  const filteredMatches = useMemo(() => {
-    let filtered = [...matches];
-
-    // Apply type filter
-    if (matchFilter !== 'all') {
-      filtered = filtered.filter(m => m.type === matchFilter);
-    }
-
-    // Apply sport filter
-    if (matchSportFilter !== 'all') {
-      filtered = filtered.filter(m => m.sport === matchSportFilter);
-    }
-
-    // Apply sorting
-    filtered.sort((a, b) => {
-      const dateA = new Date(a.createdAt || a.created_at).getTime();
-      const dateB = new Date(b.createdAt || b.created_at).getTime();
-      return matchSort === 'newest' ? dateB - dateA : dateA - dateB;
-    });
-
-    return filtered;
-  }, [matches, matchFilter, matchSportFilter, matchSort]);
-
-  // Filtered and sorted tournaments
-  const filteredTournaments = useMemo(() => {
-    let filtered = [...tournaments];
-
-    // Apply status filter
-    if (tournamentFilter === 'active') {
-      filtered = filtered.filter(t => 
-        t.state === 'draft' || t.state === 'inviting' || t.state === 'locked' || t.state === 'in_progress'
-      );
-    } else if (tournamentFilter === 'completed') {
-      filtered = filtered.filter(t => t.state === 'completed');
-    }
-
-    // Apply sorting
-    filtered.sort((a, b) => {
-      const dateA = new Date(a.created_at).getTime();
-      const dateB = new Date(b.created_at).getTime();
-      return tournamentSort === 'newest' ? dateB - dateA : dateA - dateB;
-    });
-
-    return filtered;
-  }, [tournaments, tournamentFilter, tournamentSort]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

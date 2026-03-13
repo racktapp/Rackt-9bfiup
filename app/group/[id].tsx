@@ -13,6 +13,7 @@ import { Group, GroupMember, Match } from '@/types';
 import { Sport } from '@/constants/config';
 import { getSupabaseClient } from '@/template';
 import { matchesService } from '@/services/matches';
+import { getUserLabel } from '@/utils/getUserLabel';
 
 const supabase = getSupabaseClient();
 
@@ -125,6 +126,29 @@ export default function GroupDetailScreen() {
   }, [matches, matchFilter, matchSportFilter, matchSort]);
 
   // Filtered and sorted tournaments
+
+
+  const getMatchPlayerName = (player: any) => {
+    const candidate = player?.user || player;
+    const label = getUserLabel(candidate).displayName;
+    return label === 'Unknown' ? null : label.split(' ')[0];
+  };
+
+  const getTeamLabel = (players: any[] = []) => {
+    const names = players
+      .map(getMatchPlayerName)
+      .filter((name): name is string => Boolean(name));
+
+    return names.length > 0 ? names.join(' / ') : 'Unknown player';
+  };
+
+  const getMatchupLabel = (match: Match) => {
+    const teamAPlayers = match.players?.filter((player: any) => player.team === 'A') || [];
+    const teamBPlayers = match.players?.filter((player: any) => player.team === 'B') || [];
+
+    return `${getTeamLabel(teamAPlayers)} vs ${getTeamLabel(teamBPlayers)}`;
+  };
+
   const filteredTournaments = useMemo(() => {
     let filtered = [...tournaments];
 
@@ -417,8 +441,7 @@ export default function GroupDetailScreen() {
                       {match.sport.charAt(0).toUpperCase() + match.sport.slice(1)} Match
                     </Text>
                     <Text style={styles.activitySubtitle} numberOfLines={1}>
-                      {match.players?.filter((p: any) => p.team === 'A').map((p: any) => p.user?.displayName?.split(' ')[0]).join(' / ')} vs{' '}
-                      {match.players?.filter((p: any) => p.team === 'B').map((p: any) => p.user?.displayName?.split(' ')[0]).join(' / ')}
+                      {getMatchupLabel(match)}
                     </Text>
                   </View>
                   <View style={[
@@ -575,14 +598,7 @@ export default function GroupDetailScreen() {
                         </View>
                       </View>
                       <Text style={styles.matchPlayers}>
-                        {match.players
-                          ?.filter((p: any) => p.team === 'A')
-                          .map((p: any) => p.user?.displayName)
-                          .join(' / ')} vs{' '}
-                        {match.players
-                          ?.filter((p: any) => p.team === 'B')
-                          .map((p: any) => p.user?.displayName)
-                          .join(' / ')}
+                        {getMatchupLabel(match)}
                       </Text>
                     </Pressable>
                   ))}

@@ -121,6 +121,7 @@ export const matchesService = {
         *,
         players:match_players(
           id,
+          user_id,
           team,
           user:user_id (id, username, display_name, email, initials, avatar_url)
         )
@@ -131,7 +132,36 @@ export const matchesService = {
 
     if (error) throw error;
 
-    return data || [];
+    return (data || []).map((match: any) => ({
+      id: match.id,
+      groupId: match.group_id,
+      sport: match.sport,
+      format: match.format,
+      type: match.type,
+      status: match.status,
+      winnerTeam: match.winner_team,
+      createdBy: match.created_by,
+      confirmedBy: match.confirmed_by,
+      createdAt: match.created_at,
+      confirmedAt: match.confirmed_at,
+      players: (match.players || []).map((player: any) => ({
+        id: player.id,
+        userId: player.user_id,
+        team: player.team,
+        user: player.user
+          ? {
+              id: player.user.id,
+              username: player.user.username,
+              displayName: player.user.display_name || player.user.displayName || player.user.username,
+              display_name: player.user.display_name,
+              email: player.user.email,
+              initials: player.user.initials,
+              avatarUrl: player.user.avatar_url,
+              avatar_url: player.user.avatar_url,
+            }
+          : null,
+      })),
+    }));
   },
 
   async getUserMatches(userId: string, limit = 20) {

@@ -21,8 +21,8 @@ export default function GroupDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { showAlert } = useAlert();
-  const { getGroupById, getGroupMembers, addMember } = useGroups();
-  const { getGroupMatches } = useMatches();
+  const groupsHook = useGroups();
+  const matchesHook = useMatches();
 
   const [userId, setUserId] = useState<string | null>(null);
   const [group, setGroup] = useState<Group | null>(null);
@@ -64,13 +64,13 @@ export default function GroupDetailScreen() {
   const loadGroupData = async () => {
     if (!id) return;
 
-    const groupData = await getGroupById(id);
+    const groupData = await groupsHook.getGroupById(id);
     setGroup(groupData);
 
-    const membersData = await getGroupMembers(id);
+    const membersData = await groupsHook.getGroupMembers(id);
     setMembers(membersData);
 
-    const matchesData = await getGroupMatches(id, 50); // Load more for filtering
+    const matchesData = await matchesHook.getGroupMatches(id, 50); // Load more for filtering
     setMatches(matchesData);
 
     // Load group tournaments

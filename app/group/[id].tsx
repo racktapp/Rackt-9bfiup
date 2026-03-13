@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,6 +33,7 @@ export default function GroupDetailScreen() {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [selectedSport, setSelectedSport] = useState<Sport>('tennis');
   const [refreshing, setRefreshing] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'matches' | 'tournaments'>('overview');
   const [matchFilter, setMatchFilter] = useState<'all' | 'competitive' | 'friendly'>('all');
   const [matchSportFilter, setMatchSportFilter] = useState<'all' | Sport>('all');
@@ -65,23 +66,28 @@ export default function GroupDetailScreen() {
   const loadGroupData = async () => {
     if (!id) return;
 
-    const groupData = await groupsHook.getGroupById(id);
-    setGroup(groupData);
+    setIsInitialLoading(true);
+    try {
+      const groupData = await groupsHook.getGroupById(id);
+      setGroup(groupData);
 
-    const membersData = await groupsHook.getGroupMembers(id);
-    setMembers(membersData);
+      const membersData = await groupsHook.getGroupMembers(id);
+      setMembers(membersData);
 
-    const matchesData = await matchesHook.getGroupMatches(id, 50); // Load more for filtering
-    setMatches(matchesData);
+      const matchesData = await matchesHook.getGroupMatches(id, 50); // Load more for filtering
+      setMatches(matchesData);
 
-    // Load group tournaments
-    const { data: tournamentsData } = await supabase
-      .from('tournaments')
-      .select('*')
-      .eq('group_id', id)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
-    setTournaments(tournamentsData || []);
+      // Load group tournaments
+      const { data: tournamentsData } = await supabase
+        .from('tournaments')
+        .select('*')
+        .eq('group_id', id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+      setTournaments(tournamentsData || []);
+    } finally {
+      setIsInitialLoading(false);
+    }
   };
 
   const loadLeaderboard = async () => {
@@ -179,7 +185,37 @@ export default function GroupDetailScreen() {
     );
   }
 
-  if (!group) {
+  if (isInitialLoading && !refreshing) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color={Colors.textPrimary} />
+          </Pressable>
+          <Pressable onPress={() => router.push('/(tabs)/dashboard')}>
+            <Image
+              source={require('@/assets/images/logo.png')}
+              style={styles.headerLogo}
+              contentFit="contain"
+              transition={200}
+            />
+          </Pressable>
+          <Pressable onPress={() => router.push('/settings')}>
+            <MaterialIcons name="settings" size={24} color={Colors.textPrimary} />
+          </Pressable>
+        </View>
+        <View style={styles.initialLoadingState}>
+          <ActivityIndicator size="small" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading group...</Text>
+          <View style={styles.loadingSkeletonCard} />
+          <View style={styles.loadingSkeletonRow} />
+          <View style={styles.loadingSkeletonRow} />
+        </View>
+      </View>
+    );
+  }
+
+  if (!group && !isInitialLoading && !refreshing) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
@@ -777,6 +813,25 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     textAlign: 'center',
     marginTop: Spacing.xxl,
+  },
+  initialLoadingState: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xl,
+    gap: Spacing.md,
+  },
+  loadingSkeletonCard: {
+    height: 120,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  loadingSkeletonRow: {
+    height: 56,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   coverSection: {
     backgroundColor: Colors.surface,

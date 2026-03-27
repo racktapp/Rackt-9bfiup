@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Pressable } fro
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Button, Input } from '@/components';
-import { Colors, Typography, BorderRadius, Spacing } from '@/constants/theme';
+import { Colors, Typography, Spacing } from '@/constants/theme';
 import { getSupabaseClient } from '@/template';
 
 const supabase = getSupabaseClient();
@@ -17,6 +17,30 @@ export default function VerifyCodeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  const isOnboardingComplete = async (userId: string) => {
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('username')
+      .eq('id', userId)
+      .single();
+
+    if (profileError || !profile?.username) {
+      return false;
+    }
+
+    const { data: ratings, error: ratingsError } = await supabase
+      .from('user_ratings')
+      .select('id')
+      .eq('user_id', userId)
+      .limit(1);
+
+    if (ratingsError) {
+      return false;
+    }
+
+    return Boolean(ratings && ratings.length > 0);
+  };
 
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -66,18 +90,13 @@ export default function VerifyCodeScreen() {
         return;
       }
 
-      // Check if user profile exists
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('username')
-        .eq('id', data.user.id)
-        .single();
+      const onboardingComplete = await isOnboardingComplete(data.user.id);
 
-      if (profile?.username) {
-        // Profile exists, go to main app
+      if (onboardingComplete) {
+        // Returning user with complete onboarding
         router.replace('/(tabs)');
       } else {
-        // New user, go to onboarding
+        // New or incomplete user, continue onboarding
         router.replace('/onboarding');
       }
     } catch (err: any) {

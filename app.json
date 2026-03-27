@@ -15,7 +15,7 @@
       "package": "com.taivas.rackt",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#070B16"
       },
       "edgeToEdgeEnabled": true
     },
@@ -40,7 +40,7 @@
           "image": "./assets/images/logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#070B16"
         }
       ],
       "expo-web-browser"

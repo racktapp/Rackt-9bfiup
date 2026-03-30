@@ -70,10 +70,20 @@ export default function LeaderboardsScreen() {
 
   const loadGroups = async () => {
     if (!userId) return;
-    const data = await getUserGroups(userId);
-    setGroups(data);
-    if (data.length > 0 && !selectedGroup) {
-      setSelectedGroup(data[0].id);
+    try {
+      setError(null);
+      const data = await getUserGroups(userId);
+      setGroups(data);
+
+      if (data.length > 0 && !selectedGroup) {
+        setSelectedGroup(data[0].id);
+      } else {
+        setIsLoadingInitial(false);
+      }
+    } catch (err: any) {
+      console.error('Error loading groups:', err);
+      setError(err?.message || 'Failed to load groups');
+      setIsLoadingInitial(false);
     }
   };
 

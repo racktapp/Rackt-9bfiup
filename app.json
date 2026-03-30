@@ -1,52 +1,53 @@
 {
-  "expo": {
-    "name": "Rackt",
-    "slug": "rackt",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
-    "scheme": "rackt",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "package": "com.taivas.rackt",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo.png",
-        "backgroundColor": "#070B16"
-      },
-      "edgeToEdgeEnabled": true
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/logo.png"
-    },
-    "plugins": [
-      "expo-router",
-      [
-        "react-native-google-mobile-ads",
-        {
-          "iosAppId": "ca-app-pub-4447766624305417~2257432285",
-          "androidAppId": "ca-app-pub-4447766624305417~1762608263",
-          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
-        }
-      ],
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/logo.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#070B16"
-        }
-      ],
-      "expo-web-browser"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    }
-  }
+    "expo":  {
+                 "name":  "Rackt",
+                 "slug":  "rackt",
+                 "version":  "1.0.0",
+                 "orientation":  "portrait",
+                 "icon":  "./assets/images/logo.png",
+                 "scheme":  "rackt",
+                 "userInterfaceStyle":  "automatic",
+                 "newArchEnabled":  true,
+                 "ios":  {
+                             "supportsTablet":  true
+                         },
+                 "android":  {
+                                 "package":  "com.taivas.rackt",
+                                 "adaptiveIcon":  {
+                                                      "foregroundImage":  "./assets/images/logo.png",
+                                                      "backgroundColor":  "#070B16"
+                                                  },
+                                 "edgeToEdgeEnabled":  true,
+                                 "versionCode":  206
+                             },
+                 "web":  {
+                             "bundler":  "metro",
+                             "output":  "static",
+                             "favicon":  "./assets/images/logo.png"
+                         },
+                 "plugins":  [
+                                 "expo-router",
+                                 [
+                                     "react-native-google-mobile-ads",
+                                     {
+                                         "iosAppId":  "ca-app-pub-4447766624305417~2257432285",
+                                         "androidAppId":  "ca-app-pub-4447766624305417~1762608263",
+                                         "userTrackingUsageDescription":  "This identifier will be used to deliver personalized ads to you."
+                                     }
+                                 ],
+                                 [
+                                     "expo-splash-screen",
+                                     {
+                                         "image":  "./assets/images/logo.png",
+                                         "imageWidth":  200,
+                                         "resizeMode":  "contain",
+                                         "backgroundColor":  "#070B16"
+                                     }
+                                 ],
+                                 "expo-web-browser"
+                             ],
+                 "experiments":  {
+                                     "typedRoutes":  true
+                                 }
+             }
 }
